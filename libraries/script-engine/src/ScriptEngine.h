@@ -129,6 +129,7 @@ public:
     bool isRunning() const { return _isRunning; } // used by ScriptWidget
 
     void disconnectNonEssentialSignals();
+    static void stopAllScripts(QObject* application); // used by Application on shutdown
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // NOTE - These are the callback implementations for ScriptUser the get called by ScriptCache when the contents
@@ -203,7 +204,8 @@ protected:
     void forwardHandlerCall(const EntityItemID& entityID, const QString& eventName, QScriptValueList eventHanderArgs);
     Q_INVOKABLE void entityScriptContentAvailable(const EntityItemID& entityID, const QString& scriptOrURL, const QString& contents, bool isURL, bool success);
 
-    friend class ScriptEngines;
+    static QSet<ScriptEngine*> _allKnownScriptEngines;
+    static QMutex _allScriptsMutex;
     static std::atomic<bool> _stoppingAllScripts;
 };
 

@@ -32,14 +32,9 @@ DialogContainer {
     property int maximumY: parent ? parent.height - height : 0
 
 
-    Rectangle {
-        id: dragRegion
-        visible: dragMouseArea.containsMouse
-    } 
-
     AddressBarDialog {
         id: addressBarDialog
-        z: dragRegion.z + 1
+
         implicitWidth: backgroundImage.width
         implicitHeight: backgroundImage.height
 
@@ -53,13 +48,11 @@ DialogContainer {
             property int inputAreaStep: (height - inputAreaHeight) / 2
 
             MouseArea {
-                id: dragMouseArea
                 // Drag the icon
                 width: parent.height
                 height: parent.height
                 x: 0
                 y: 0
-                hoverEnabled: true
                 drag {
                     target: root
                     minimumX: -parent.inputAreaStep
@@ -68,8 +61,6 @@ DialogContainer {
                     maximumY: root.parent ? root.maximumY + parent.inputAreaStep : 0
                 }
             }
-            
-            
 
             MouseArea {
                 // Drag the input rectangle

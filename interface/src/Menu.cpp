@@ -21,7 +21,6 @@
 #include <SettingHandle.h>
 #include <UserActivityLogger.h>
 #include <VrMenu.h>
-#include <ScriptEngines.h>
 
 #include "Application.h"
 #include "AccountManager.h"
@@ -115,15 +114,13 @@ Menu::Menu() {
         Qt::CTRL | Qt::SHIFT | Qt::Key_O, qApp, SLOT(loadScriptURLDialog()),
         QAction::NoRole, UNSPECIFIED_POSITION, "Advanced");
 
-    auto scriptEngines = DependencyManager::get<ScriptEngines>();
     // Edit > Stop All Scripts... [advanced]
-    addActionToQMenuAndActionHash(editMenu, MenuOption::StopAllScripts, 0, 
-        scriptEngines.data(), SLOT(stopAllScripts()),
+    addActionToQMenuAndActionHash(editMenu, MenuOption::StopAllScripts, 0, qApp, SLOT(stopAllScripts()),
         QAction::NoRole, UNSPECIFIED_POSITION, "Advanced");
 
     // Edit > Reload All Scripts... [advanced]
     addActionToQMenuAndActionHash(editMenu, MenuOption::ReloadAllScripts, Qt::CTRL | Qt::Key_R,
-        scriptEngines.data(), SLOT(reloadAllScripts()),
+        qApp, SLOT(reloadAllScripts()),
         QAction::NoRole, UNSPECIFIED_POSITION, "Advanced");
 
     // Edit > Scripts Editor... [advanced]

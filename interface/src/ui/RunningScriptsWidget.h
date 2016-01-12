@@ -33,12 +33,24 @@ public:
 
     void setRunningScripts(const QStringList& list);
 
+    const ScriptsModel* getScriptsModel() { return &_scriptsModel; }
+
+signals:
+    void scriptStopped(const QString& scriptName);
+
 protected:
     virtual bool eventFilter(QObject* sender, QEvent* event);
 
     virtual void keyPressEvent(QKeyEvent* event);
     virtual void showEvent(QShowEvent* event);
 
+public slots:
+    QVariantList getRunning();
+    QVariantList getPublic();
+    QVariantList getLocal();
+    bool stopScript(const QString& name, bool restart = false);
+    bool stopScriptByName(const QString& name);
+    
 private slots:
     void allScriptsStopped();
     void updateFileFilter(const QString& filter);
@@ -50,6 +62,9 @@ private:
     Ui::RunningScriptsWidget* ui;
     QSignalMapper _reloadSignalMapper;
     QSignalMapper _stopSignalMapper;
+    ScriptsModelFilter _scriptsModelFilter;
+    ScriptsModel _scriptsModel;
+
     QVariantList getPublicChildNodes(TreeNodeFolder* parent);
 };
 

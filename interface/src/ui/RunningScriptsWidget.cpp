@@ -22,10 +22,8 @@
 #include <QWindow>
 
 #include <PathUtils.h>
-#include <ScriptEngines.h>
 
 #include "Application.h"
-#include "MainWindow.h"
 #include "Menu.h"
 #include "ScriptsModel.h"
 #include "UIUtil.h"
@@ -35,55 +33,57 @@ RunningScriptsWidget::RunningScriptsWidget(QWidget* parent) :
             Qt::WindowCloseButtonHint),
     ui(new Ui::RunningScriptsWidget),
     _reloadSignalMapper(this),
-    _stopSignalMapper(this) {
+    _stopSignalMapper(this),
+    _scriptsModelFilter(this),
+    _scriptsModel(this) {
     ui->setupUi(this);
 
     setAttribute(Qt::WA_DeleteOnClose, false);
 
     ui->filterLineEdit->installEventFilter(this);
 
-    auto scriptEngines = DependencyManager::get<ScriptEngines>().data();
-    connect(scriptEngines->scriptsModelFilter(), &QSortFilterProxyModel::modelReset,
+    connect(&_scriptsModelFilter, &QSortFilterProxyModel::modelReset,
             this, &RunningScriptsWidget::selectFirstInList);
 
     // FIXME: menu isn't prepared at this point.
     //QString shortcutText = Menu::getInstance()->getActionForOption(MenuOption::ReloadAllScripts)->shortcut().toString(QKeySequence::NativeText);
     //ui->tipLabel->setText("Tip: Use " + shortcutText + " to reload all scripts.");
-    ui->scriptTreeView->setModel(scriptEngines->scriptsModelFilter());
+
+    _scriptsModelFilter.setSourceModel(&_scriptsModel);
+    _scriptsModelFilter.sort(0, Qt::AscendingOrder);
+    _scriptsModelFilter.setDynamicSortFilter(true);
+    ui->scriptTreeView->setModel(&_scriptsModelFilter);
 
     connect(ui->filterLineEdit, &QLineEdit::textChanged, this, &RunningScriptsWidget::updateFileFilter);
     connect(ui->scriptTreeView, &QTreeView::doubleClicked, this, &RunningScriptsWidget::loadScriptFromList);
 
-    connect(ui->reloadAllButton, &QPushButton::clicked, scriptEngines, &ScriptEngines::reloadAllScripts);
-    connect(ui->stopAllButton, &QPushButton::clicked, scriptEngines, &ScriptEngines::stopAllScripts);
+    connect(ui->reloadAllButton, &QPushButton::clicked, qApp, &Application::reloadAllScripts);
+    connect(ui->stopAllButton, &QPushButton::clicked, this, &RunningScriptsWidget::allScriptsStopped);
     connect(ui->loadScriptFromDiskButton, &QPushButton::clicked, qApp, &Application::loadDialog);
     connect(ui->loadScriptFromURLButton, &QPushButton::clicked, qApp, &Application::loadScriptURLDialog);
     connect(&_reloadSignalMapper, static_cast<void(QSignalMapper::*)(const QString&)>(&QSignalMapper::mapped),
-        [scriptEngines](const QString& scriptName) { scriptEngines->stopScript(scriptName, true); });
-    connect(&_stopSignalMapper, static_cast<void(QSignalMapper::*)(const QString&)>(&QSignalMapper::mapped),
-        [scriptEngines](const QString& scriptName) { scriptEngines->stopScript(scriptName); });
+            qApp, &Application::reloadOneScript);
 
-    setRunningScripts(scriptEngines->getRunningScripts());
-    connect(scriptEngines, &ScriptEngines::scriptCountChanged, scriptEngines, [this, scriptEngines] { 
-        setRunningScripts(scriptEngines->getRunningScripts()); 
-    }, Qt::QueuedConnection);
+    connect(&_stopSignalMapper, static_cast<void(QSignalMapper::*)(const QString&)>(&QSignalMapper::mapped),
+            [](const QString& script) { qApp->stopScript(script); });
+
     UIUtil::scaleWidgetFontSizes(this);
 }
 
 RunningScriptsWidget::~RunningScriptsWidget() {
     delete ui;
+    _scriptsModel.deleteLater();
 }
 
 void RunningScriptsWidget::updateFileFilter(const QString& filter) {
     QRegExp regex("^.*" + QRegExp::escape(filter) + ".*$", Qt::CaseInsensitive);
-    DependencyManager::get<ScriptEngines>()->scriptsModelFilter()->setFilterRegExp(regex);
+    _scriptsModelFilter.setFilterRegExp(regex);
     selectFirstInList();
 }
 
 void RunningScriptsWidget::loadScriptFromList(const QModelIndex& index) {
-    auto scriptEngines = DependencyManager::get<ScriptEngines>();
-    QVariant scriptFile = scriptEngines->scriptsModelFilter()->data(index, ScriptsModel::ScriptPath);
-    scriptEngines->loadScript(scriptFile.toString());
+    QVariant scriptFile = _scriptsModelFilter.data(index, ScriptsModel::ScriptPath);
+    qApp->loadScript(scriptFile.toString());
 }
 
 void RunningScriptsWidget::loadSelectedScript() {
@@ -172,7 +172,7 @@ void RunningScriptsWidget::showEvent(QShowEvent* event) {
         ui->filterLineEdit->setFocus();
     }
 
-    QRect parentGeometry = qApp->getWindow()->geometry();
+    QRect parentGeometry = qApp->getDesirableApplicationGeometry();
     int titleBarHeight = UIUtil::getWindowTitleBarHeight(this);
     int topMargin = titleBarHeight;
 
@@ -183,9 +183,8 @@ void RunningScriptsWidget::showEvent(QShowEvent* event) {
 }
 
 void RunningScriptsWidget::selectFirstInList() {
-    auto model = DependencyManager::get<ScriptEngines>()->scriptsModelFilter();
-    if (model->rowCount() > 0) {
-        ui->scriptTreeView->setCurrentIndex(model->index(0, 0));
+    if (_scriptsModelFilter.rowCount() > 0) {
+        ui->scriptTreeView->setCurrentIndex(_scriptsModelFilter.index(0, 0));
     }
 }
 
@@ -218,5 +217,90 @@ void RunningScriptsWidget::keyPressEvent(QKeyEvent *keyEvent) {
 }
 
 void RunningScriptsWidget::allScriptsStopped() {
-    DependencyManager::get<ScriptEngines>()->stopAllScripts();
+    qApp->stopAllScripts();
+}
+
+QVariantList RunningScriptsWidget::getRunning() {
+    const int WINDOWS_DRIVE_LETTER_SIZE = 1;
+    QVariantList result;
+    foreach(const QString& runningScript, qApp->getRunningScripts()) {
+        QUrl runningScriptURL = QUrl(runningScript);
+        if (runningScriptURL.scheme().size() <= WINDOWS_DRIVE_LETTER_SIZE) {
+            runningScriptURL = QUrl::fromLocalFile(runningScriptURL.toDisplayString(QUrl::FormattingOptions(QUrl::FullyEncoded)));
+        }
+        QVariantMap resultNode;
+        resultNode.insert("name", runningScriptURL.fileName());
+        resultNode.insert("url", runningScriptURL.toDisplayString(QUrl::FormattingOptions(QUrl::FullyEncoded)));
+        // The path contains the exact path/URL of the script, which also is used in the stopScript function.
+        resultNode.insert("path", runningScript);
+        resultNode.insert("local", runningScriptURL.isLocalFile());
+        result.append(resultNode);
+    }
+    return result;
+}
+
+QVariantList RunningScriptsWidget::getPublic() {
+    return getPublicChildNodes(NULL);
+}
+
+QVariantList RunningScriptsWidget::getPublicChildNodes(TreeNodeFolder* parent) {
+    QVariantList result;
+    QList<TreeNodeBase*> treeNodes = qApp->getRunningScriptsWidget()->getScriptsModel()
+        ->getFolderNodes(parent);
+    for (int i = 0; i < treeNodes.size(); i++) {
+        TreeNodeBase* node = treeNodes.at(i);
+        if (node->getType() == TREE_NODE_TYPE_FOLDER) {
+            TreeNodeFolder* folder = static_cast<TreeNodeFolder*>(node);
+            QVariantMap resultNode;
+            resultNode.insert("name", node->getName());
+            resultNode.insert("type", "folder");
+            resultNode.insert("children", getPublicChildNodes(folder));
+            result.append(resultNode);
+            continue;
+        }
+        TreeNodeScript* script = static_cast<TreeNodeScript*>(node);
+        if (script->getOrigin() == ScriptOrigin::SCRIPT_ORIGIN_LOCAL) {
+            continue;
+        }
+        QVariantMap resultNode;
+        resultNode.insert("name", node->getName());
+        resultNode.insert("type", "script");
+        resultNode.insert("url", script->getFullPath());
+        result.append(resultNode);
+    }
+    return result;
+}
+
+QVariantList RunningScriptsWidget::getLocal() {
+    QVariantList result;
+    QList<TreeNodeBase*> treeNodes = qApp->getRunningScriptsWidget()->getScriptsModel()
+        ->getFolderNodes(NULL);
+    for (int i = 0; i < treeNodes.size(); i++) {
+        TreeNodeBase* node = treeNodes.at(i);
+        if (node->getType() != TREE_NODE_TYPE_SCRIPT) {
+            continue;
+        }
+        TreeNodeScript* script = static_cast<TreeNodeScript*>(node);
+        if (script->getOrigin() != ScriptOrigin::SCRIPT_ORIGIN_LOCAL) {
+            continue;
+        }
+        QVariantMap resultNode;
+        resultNode.insert("name", node->getName());
+        resultNode.insert("path", script->getFullPath());
+        result.append(resultNode);
+    }
+    return result;
+}
+
+bool RunningScriptsWidget::stopScriptByName(const QString& name) {
+    foreach (const QString& runningScript, qApp->getRunningScripts()) {
+        if (QUrl(runningScript).fileName().toLower() == name.trimmed().toLower()) {
+            return qApp->stopScript(runningScript, false);
+        }
+    }
+    return false;
+}
+
+bool RunningScriptsWidget::stopScript(const QString& name, bool restart) {
+    return qApp->stopScript(name, restart);
 }
