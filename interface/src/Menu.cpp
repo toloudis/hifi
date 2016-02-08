@@ -70,8 +70,8 @@ Menu::Menu() {
     }
 
     // File > Update -- FIXME: needs implementation
-    auto updateAction = addActionToQMenuAndActionHash(fileMenu, "Update");
-    updateAction->setDisabled(true);
+    auto action = addActionToQMenuAndActionHash(fileMenu, "Update");
+    action->setDisabled(true);
 
     // File > Help
     addActionToQMenuAndActionHash(fileMenu, MenuOption::Help, 0, qApp, SLOT(showHelp()));
@@ -166,8 +166,11 @@ Menu::Menu() {
     QObject* avatar = avatarManager->getMyAvatar();
 
     // Avatar > Attachments...
-    addActionToQMenuAndActionHash(avatarMenu, MenuOption::Attachments, 0,
-        dialogsManager.data(), SLOT(editAttachments()));
+    action = addActionToQMenuAndActionHash(avatarMenu, MenuOption::Attachments);
+    connect(action, &QAction::triggered, [] {
+        DependencyManager::get<OffscreenUi>()->show(QString("hifi/dialogs/AttachmentsDialog.qml"), "AttachmentsDialog");
+    });
+
 
     // Avatar > Size
     MenuWrapper* avatarSizeMenu = avatarMenu->addMenu("Size");
@@ -285,20 +288,29 @@ Menu::Menu() {
     addCheckableActionToQMenuAndActionHash(settingsMenu, "Developer Menus", 0, false, this, SLOT(toggleDeveloperMenus()));
 
     // Settings > General...
-    addActionToQMenuAndActionHash(settingsMenu, MenuOption::Preferences, Qt::CTRL | Qt::Key_Comma,
-        dialogsManager.data(), SLOT(editPreferences()), QAction::PreferencesRole);
+    action = addActionToQMenuAndActionHash(settingsMenu, MenuOption::Preferences, Qt::CTRL | Qt::Key_Comma, nullptr, nullptr, QAction::PreferencesRole);
+    connect(action, &QAction::triggered, [] {
+        DependencyManager::get<OffscreenUi>()->toggle(QString("hifi/dialogs/GeneralPreferencesDialog.qml"), "GeneralPreferencesDialog");
+    });
+
 
     // Settings > Avatar...-- FIXME: needs implementation
-    auto avatarAction = addActionToQMenuAndActionHash(settingsMenu, "Avatar...");
-    avatarAction->setDisabled(true);
+    action = addActionToQMenuAndActionHash(settingsMenu, "Avatar...");
+    connect(action, &QAction::triggered, [] {
+        DependencyManager::get<OffscreenUi>()->toggle(QString("hifi/dialogs/AvatarPreferencesDialog.qml"), "AvatarPreferencesDialog");
+    });
 
     // Settings > Audio...-- FIXME: needs implementation
-    auto audioAction = addActionToQMenuAndActionHash(settingsMenu, "Audio...");
-    audioAction->setDisabled(true);
+    action = addActionToQMenuAndActionHash(settingsMenu, "Audio...");
+    connect(action, &QAction::triggered, [] {
+        DependencyManager::get<OffscreenUi>()->toggle(QString("hifi/dialogs/AudioPreferencesDialog.qml"), "AudioPreferencesDialog");
+    });
 
     // Settings > LOD...-- FIXME: needs implementation
-    auto lodAction = addActionToQMenuAndActionHash(settingsMenu, "LOD...");
-    lodAction->setDisabled(true);
+    action = addActionToQMenuAndActionHash(settingsMenu, "LOD...");
+    connect(action, &QAction::triggered, [] {
+        DependencyManager::get<OffscreenUi>()->toggle(QString("hifi/dialogs/LodPreferencesDialog.qml"), "LodPreferencesDialog");
+    });
 
     // Settings > Control with Speech [advanced]
 #if defined(Q_OS_MAC) || defined(Q_OS_WIN)
@@ -323,9 +335,9 @@ Menu::Menu() {
 
     // Developer > Render >>>
     MenuWrapper* renderOptionsMenu = developerMenu->addMenu("Render");
-    addCheckableActionToQMenuAndActionHash(renderOptionsMenu, MenuOption::Atmosphere, 0, true);
     addCheckableActionToQMenuAndActionHash(renderOptionsMenu, MenuOption::WorldAxes);
     addCheckableActionToQMenuAndActionHash(renderOptionsMenu, MenuOption::DebugAmbientOcclusion);
+    addCheckableActionToQMenuAndActionHash(renderOptionsMenu, MenuOption::DebugShadows);
     addCheckableActionToQMenuAndActionHash(renderOptionsMenu, MenuOption::Antialiasing);
     addCheckableActionToQMenuAndActionHash(renderOptionsMenu, MenuOption::Stars, 0, true);
 

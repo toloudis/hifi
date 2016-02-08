@@ -32,8 +32,8 @@ public:
     virtual bool handleEasyChanges(uint32_t& flags);
     virtual bool handleHardAndEasyChanges(uint32_t& flags, PhysicsEngine* engine);
 
-    /// \return MOTION_TYPE_DYNAMIC or MOTION_TYPE_STATIC based on params set in EntityItem
-    virtual MotionType computeObjectMotionType() const;
+    /// \return PhysicsMotionType based on params set in EntityItem
+    virtual PhysicsMotionType computePhysicsMotionType() const;
 
     virtual bool isMoving() const;
 
@@ -67,7 +67,7 @@ public:
     virtual glm::vec3 getObjectGravity() const override { return _entity->getGravity(); }
     virtual glm::vec3 getObjectLinearVelocityChange() const override;
 
-    virtual const QUuid& getObjectID() const override { return _entity->getID(); }
+    virtual const QUuid getObjectID() const override { return _entity->getID(); }
 
     virtual quint8 getSimulationPriority() const override;
     virtual QUuid getSimulatorID() const override;
@@ -94,7 +94,7 @@ protected:
 
     virtual bool isReadyToComputeShape() const override;
     virtual btCollisionShape* computeNewShape();
-    virtual void setMotionType(MotionType motionType);
+    virtual void setMotionType(PhysicsMotionType motionType);
 
     // In the glorious future (when entities lib depends on physics lib) the EntityMotionState will be
     // properly "owned" by the EntityItem and will be deleted by it in the dtor.  In pursuit of that

@@ -22,12 +22,12 @@ class AvatarMotionState : public ObjectMotionState {
 public:
     AvatarMotionState(Avatar* avatar, btCollisionShape* shape);
 
-    virtual MotionType getMotionType() const override { return _motionType; }
+    virtual PhysicsMotionType getMotionType() const override { return _motionType; }
 
     virtual uint32_t getIncomingDirtyFlags() override;
     virtual void clearIncomingDirtyFlags() override;
 
-    virtual MotionType computeObjectMotionType() const override;
+    virtual PhysicsMotionType computePhysicsMotionType() const override;
 
     virtual bool isMoving() const override;
 
@@ -53,7 +53,7 @@ public:
     virtual glm::vec3 getObjectAngularVelocity() const override;
     virtual glm::vec3 getObjectGravity() const override;
 
-    virtual const QUuid& getObjectID() const override;
+    virtual const QUuid getObjectID() const override;
 
     virtual QUuid getSimulatorID() const override;
 

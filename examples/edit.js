@@ -1556,6 +1556,11 @@ PropertiesTool = function(opts) {
                     Entities.editEntity(selectionManager.selections[i], properties);
                 }
             } else {
+                if (data.properties.dynamic === false) {
+                    // this object is leaving dynamic, so we zero its velocities
+                    data.properties["velocity"] = {x: 0, y: 0, z: 0};
+                    data.properties["angularVelocity"] = {x: 0, y: 0, z: 0};
+                }
                 if (data.properties.rotation !== undefined) {
                     var rotation = data.properties.rotation;
                     data.properties.rotation = Quat.fromPitchYawRollDegrees(rotation.x, rotation.y, rotation.z);
@@ -1658,29 +1663,6 @@ PropertiesTool = function(opts) {
                             scriptTimestamp: timestamp,
                         });
                     }
-                }
-            } else if (data.action == "centerAtmosphereToZone") {
-                if (selectionManager.hasSelection()) {
-                    selectionManager.saveProperties();
-                    for (var i = 0; i < selectionManager.selections.length; i++) {
-                        var properties = selectionManager.savedProperties[selectionManager.selections[i]];
-                        if (properties.type == "Zone") {
-                            var centerOfZone = properties.boundingBox.center;
-                            var atmosphereCenter = {
-                                x: centerOfZone.x,
-                                y: centerOfZone.y - properties.atmosphere.innerRadius,
-                                z: centerOfZone.z
-                            };
-
-                            Entities.editEntity(selectionManager.selections[i], {
-                                atmosphere: {
-                                    center: atmosphereCenter
-                                },
-                            });
-                        }
-                    }
-                    pushCommandForSelections();
-                    selectionManager._update();
                 }
             }
         }

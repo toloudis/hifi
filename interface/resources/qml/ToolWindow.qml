@@ -13,8 +13,9 @@ Windows.Window {
     objectName: "ToolWindow"
     destroyOnCloseButton: false
     destroyOnInvisible: false
-    closable: false
+    closable: true
     visible: false
+    width: 384; height: 640;
     property string newTabSource
     property alias tabView: tabView
     onParentChanged: {
@@ -43,7 +44,8 @@ Windows.Window {
     }
 
     TabView {
-        id: tabView; width: 384; height: 640;
+        anchors.fill: parent
+        id: tabView;
         onCountChanged: {
             if (0 == count) {
                 toolWindow.visible = false
@@ -52,17 +54,12 @@ Windows.Window {
     }
 
     function updateVisiblity() {
-        var newVisible = false
-        console.log("Checking " + tabView.count + " children")
         for (var i = 0; i < tabView.count; ++i) {
             if (tabView.getTab(i).enabled) {
-                console.log("Tab " + i + " enabled");
-                newVisible = true;
-                break;
+                return;
             }
         }
-        console.log("Setting toolWindow visible: " + newVisible);
-        visible = newVisible
+        visible = false;
     }
 
     function findIndexForUrl(source) {
@@ -73,15 +70,41 @@ Windows.Window {
                 return i;
             }
         }
+        console.warn("Could not find tab for " + source);
         return -1;
+    }
+
+    function findTabForUrl(source) {
+        var index = findIndexForUrl(source);
+        if (index < 0) {
+            return;
+        }
+        return tabView.getTab(index);
+    }
+
+    function showTabForUrl(source, newVisible) {
+        var index = findIndexForUrl(source);
+        if (index < 0) {
+            return;
+        }
+
+        var tab = tabView.getTab(index);
+        if (newVisible) {
+            toolWindow.visible = true
+            tab.enabled = true
+        } else {
+            tab.enabled = false;
+            updateVisiblity();
+        }
     }
 
     function removeTabForUrl(source) {
         var index = findIndexForUrl(source);
         if (index < 0) {
-            console.warn("Could not find tab for " + source);
             return;
         }
+        var tab = tabView.getTab(index);
+        tab.enabledChanged.disconnect(updateVisiblity);
         tabView.removeTab(index);
         console.log("Updating visibility based on child tab removed");
         updateVisiblity();
@@ -101,7 +124,6 @@ Windows.Window {
 
         var title = properties.title || "Unknown";
         newTabSource = properties.source;
-        console.log(typeof(properties.source))
         var newTab = tabView.addTab(title, webTabCreator);
         newTab.active = true;
         newTab.enabled = false;
@@ -117,10 +139,7 @@ Windows.Window {
         }
 
         console.log("Updating visibility based on child tab added");
-        newTab.enabledChanged.connect(function() {
-            console.log("Updating visibility based on child tab enabled change");
-            updateVisiblity();
-        })
+        newTab.enabledChanged.connect(updateVisiblity)
         updateVisiblity();
         return newTab
     }

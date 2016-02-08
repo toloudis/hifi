@@ -13,12 +13,18 @@ Window {
     title: "Running Scripts"
     resizable: true
     destroyOnInvisible: true
-    enabled: false
     x: 40; y: 40
+    implicitWidth: 384; implicitHeight: 640
 
     property var scripts: ScriptDiscoveryService;
     property var scriptsModel: scripts.scriptsModelFilter
     property var runningScriptsModel: ListModel { }
+    property var fileFilters: ListModel {
+        id: jsFilters
+        ListElement { text: "Javascript Files (*.js)"; filter: "*.js" }
+        ListElement { text: "All Files (*.*)"; filter: "*.*" }
+    }
+
 
     Settings {
         category: "Overlay.RunningScripts"
@@ -66,9 +72,26 @@ Window {
         scripts.stopAllScripts();
     }
 
+    Component {
+        id: fileDialogBuilder
+        FileDialog { }
+    }
+
+    function loadFromFile() {
+        var fileDialog = fileDialogBuilder.createObject(desktop, { filterModel: fileFilters });
+        fileDialog.canceled.connect(function(){
+            console.debug("Cancelled file open")
+        })
+
+        fileDialog.selectedFile.connect(function(file){
+            console.debug("Selected " + file)
+            scripts.loadOneScript(file);
+        })
+    }
+
     Rectangle {
         color: "white"
-        implicitWidth: 384; implicitHeight: 640
+        anchors.fill: parent
 
         Item {
             anchors { fill: parent; margins: 8 }
@@ -89,8 +112,7 @@ Window {
                 Button { text: "Stop all"; onClicked: stopAll() }
             }
 
-            ListView {
-                clip: true
+            ScrollView {
                 anchors {
                     top: allButtons.bottom;
                     left: parent.left;
@@ -100,44 +122,48 @@ Window {
                     bottomMargin: 8
                 }
 
-                model: runningScriptsModel
+                ListView {
+                    clip: true
+                    anchors { fill: parent; margins: 0 }
 
-                delegate: Rectangle {
-                    radius: 3
-                    anchors { left: parent.left; right: parent.right }
+                    model: runningScriptsModel
 
-                    height: scriptName.height + 12
-                    color: index % 2 ? "#ddd" : "#eee"
+                    delegate: Rectangle {
+                        radius: 3
+                        anchors { left: parent.left; right: parent.right }
 
-                    Text {
-                        anchors { left: parent.left; leftMargin: 4; verticalCenter: parent.verticalCenter }
-                        id: scriptName
-                        text: name
-                    }
+                        height: scriptName.height + 12
+                        color: index % 2 ? "#ddd" : "#eee"
 
-                    Row {
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.right: parent.right
-                        anchors.rightMargin: 4
-                        spacing: 4
-                        HifiControls.FontAwesome {
-                            text: "\uf021"; size: scriptName.height;
-                            MouseArea {
-                                anchors { fill: parent; margins: -2; }
-                                onClicked: reloadScript(model.url)
-                            }
+                        Text {
+                            anchors { left: parent.left; leftMargin: 4; verticalCenter: parent.verticalCenter }
+                            id: scriptName
+                            text: name
                         }
-                        HifiControls.FontAwesome {
-                            size: scriptName.height; text: "\uf00d"
-                            MouseArea {
-                                anchors { fill: parent; margins: -2; }
-                                onClicked: stopScript(model.url)
+
+                        Row {
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.right: parent.right
+                            anchors.rightMargin: 4
+                            spacing: 4
+                            HifiControls.FontAwesome {
+                                text: "\uf021"; size: scriptName.height;
+                                MouseArea {
+                                    anchors { fill: parent; margins: -2; }
+                                    onClicked: reloadScript(model.url)
+                                }
+                            }
+                            HifiControls.FontAwesome {
+                                size: scriptName.height; text: "\uf00d"
+                                MouseArea {
+                                    anchors { fill: parent; margins: -2; }
+                                    onClicked: stopScript(model.url)
+                                }
                             }
                         }
                     }
                 }
             }
-
 
             Text {
                 id: loadLabel
@@ -158,13 +184,32 @@ Window {
                 anchors.bottom: filterEdit.top
                 anchors.bottomMargin: 8
                 anchors.right: parent.right
+
+                // For some reason trigginer an API that enters
+                // an internal event loop directly from the button clicked
+                // trigger below causes the appliction to behave oddly.
+                // Most likely because the button onClicked handling is never
+                // completed until the function returns.
+                // FIXME find a better way of handling the input dialogs that
+                // doesn't trigger this.
+                Timer {
+                    id: asyncAction
+                    interval: 50
+                    repeat: false
+                    running: false
+                    onTriggered: ApplicationInterface.loadScriptURLDialog();
+                }
+
                 Button {
                     text: "from URL";
-                    onClicked: ApplicationInterface.loadScriptURLDialog();
+                    onClicked: {
+                        focus = false;
+                        asyncAction.running = true;
+                    }
                 }
                 Button {
                     text: "from Disk"
-                    onClicked: ApplicationInterface.loadDialog();
+                    onClicked: loadFromFile();
                 }
             }
 
@@ -175,7 +220,8 @@ Window {
                 anchors.bottom: treeView.top
                 anchors.bottomMargin: 8
                 placeholderText: "filter"
-                onTextChanged: scriptsModel.filterRegExp =  new RegExp("^.*" + text + ".*$")
+                onTextChanged: scriptsModel.filterRegExp =  new RegExp("^.*" + text + ".*$", "i")
+                Component.onCompleted: scriptsModel.filterRegExp = new RegExp("^.*$", "i")
             }
 
             TreeView {
@@ -202,7 +248,6 @@ Window {
 
             TextField {
                 id: selectedScript
-                enabled: true
                 readOnly: true
                 anchors.left: parent.left
                 anchors.right: loadButton.left

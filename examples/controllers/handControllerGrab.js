@@ -33,6 +33,8 @@ var BUMPER_ON_VALUE = 0.5;
 
 var HAND_HEAD_MIX_RATIO = 0.0; //  0 = only use hands for search/move.  1 = only use head for search/move.
 
+var PICK_WITH_HAND_RAY = true;
+
 //
 // distant manipulation
 //
@@ -40,7 +42,7 @@ var HAND_HEAD_MIX_RATIO = 0.0; //  0 = only use hands for search/move.  1 = only
 var DISTANCE_HOLDING_RADIUS_FACTOR = 3.5; // multiplied by distance between hand and object
 var DISTANCE_HOLDING_ACTION_TIMEFRAME = 0.1; // how quickly objects move to their new position
 var DISTANCE_HOLDING_ROTATION_EXAGGERATION_FACTOR = 2.0; // object rotates this much more than hand did
-var MOVE_WITH_HEAD = true; // experimental head-controll of distantly held objects
+var MOVE_WITH_HEAD = true; // experimental head-control of distantly held objects
 var FAR_TO_NEAR_GRAB_PADDING_FACTOR = 1.2;
 
 var NO_INTERSECT_COLOR = {
@@ -106,7 +108,7 @@ var GRABBABLE_PROPERTIES = [
     "position",
     "rotation",
     "gravity",
-    "collisionMask",
+    "collidesWith",
     "collisionsWillMove",
     "locked",
     "name",
@@ -132,12 +134,11 @@ var blacklist = [];
 //we've created various ways of visualizing looking for and moving distant objects
 var USE_ENTITY_LINES_FOR_SEARCHING = false;
 var USE_OVERLAY_LINES_FOR_SEARCHING = true;
-var USE_PARTICLE_BEAM_FOR_SEARCHING = false;
 
 var USE_ENTITY_LINES_FOR_MOVING = false;
 var USE_OVERLAY_LINES_FOR_MOVING = false;
 var USE_PARTICLE_BEAM_FOR_MOVING = true;
-var TEMPORARY_PARTICLE_BEAM_LIFETIME = 30;
+
 
 var USE_SPOTLIGHT = false;
 var USE_POINTLIGHT = false;
@@ -161,9 +162,10 @@ var STATE_CONTINUE_EQUIP = 14;
 var STATE_WAITING_FOR_BUMPER_RELEASE = 15;
 var STATE_EQUIP_SPRING = 16;
 
-// collision masks are specified by comma-separated list of group names
-// the possible list of names is:  static, dynamic, kinematic, myAvatar, otherAvatar
-var COLLISION_MASK_WHILE_GRABBED = "dynamic,otherAvatar";
+// "collidesWith" is specified by comma-separated list of group names
+// the possible group names are:  static, dynamic, kinematic, myAvatar, otherAvatar
+var COLLIDES_WITH_WHILE_GRABBED = "dynamic,otherAvatar";
+var COLLIDES_WITH_WHILE_MULTI_GRABBED = "dynamic";
 
 function stateToName(state) {
     switch (state) {
@@ -302,8 +304,10 @@ function MyController(hand) {
     this.searchSphere = null;
 
     // how far from camera to search intersection?
+    var DEFAULT_SEARCH_SPHERE_DISTANCE = 1000;
     this.intersectionDistance = 0.0;
-    this.searchSphereDistance = 0.0;
+    this.searchSphereDistance = DEFAULT_SEARCH_SPHERE_DISTANCE;
+
 
     this.ignoreIK = false;
     this.offsetPosition = Vec3.ZERO;
@@ -456,7 +460,6 @@ function MyController(hand) {
                 visible: true,
                 alpha: 1
             };
-
             this.overlayLine = Overlays.addOverlay("line3d", lineProperties);
 
         } else {
@@ -472,24 +475,6 @@ function MyController(hand) {
         }
     };
 
-    this.handleParticleBeam = function(position, orientation, color) {
-
-        var rotation = Quat.angleAxis(0, {
-            x: 1,
-            y: 0,
-            z: 0
-        });
-
-        var finalRotation = Quat.multiply(orientation, rotation);
-        var lifespan = LINE_LENGTH / 10;
-        var speed = 5;
-        var spread = 2;
-        if (this.particleBeam === null) {
-            this.createParticleBeam(position, finalRotation, color, speed, spread, lifespan);
-        } else {
-            this.updateParticleBeam(position, finalRotation, color, speed, spread, lifespan);
-        }
-    };
 
     this.handleDistantParticleBeam = function(handPosition, objectPosition, color) {
 
@@ -501,7 +486,6 @@ function MyController(hand) {
         var spread = 0;
 
         var lifespan = distance / speed;
-
 
         if (this.particleBeam === null) {
             this.createParticleBeam(objectPosition, finalRotation, color, speed, spread, lifespan);
@@ -517,6 +501,7 @@ function MyController(hand) {
             isEmitting: true,
             position: position,
             visible: false,
+            lifetime: 60,
             "name": "Particle Beam",
             "color": color,
             "maxParticles": 2000,
@@ -552,15 +537,6 @@ function MyController(hand) {
             },
             "particleRadius": 0.015,
             "radiusSpread": 0.005,
-            // "radiusStart": 0.01,
-            // "radiusFinish": 0.01,
-            // "colorSpread": {
-            //     "red": 0,
-            //     "green": 0,
-            //     "blue": 0
-            // },
-            // "colorStart": color,
-            // "colorFinish": color,
             "alpha": 1,
             "alphaSpread": 0,
             "alphaStart": 1,
@@ -699,10 +675,9 @@ function MyController(hand) {
 
     this.searchSphereOff = function() {
         if (this.searchSphere !== null) {
-            //Overlays.editOverlay(this.searchSphere, { visible: false });
             Overlays.deleteOverlay(this.searchSphere);
             this.searchSphere = null;
-            this.searchSphereDistance = 0.0;
+            this.searchSphereDistance = DEFAULT_SEARCH_SPHERE_DISTANCE;
             this.intersectionDistance = 0.0;
         }
 
@@ -710,9 +685,8 @@ function MyController(hand) {
 
     this.particleBeamOff = function() {
         if (this.particleBeam !== null) {
-            Entities.editEntity(this.particleBeam, {
-                visible: false
-            })
+            Entities.deleteEntity(this.particleBeam);
+            this.particleBeam = null;
         }
     }
 
@@ -742,7 +716,7 @@ function MyController(hand) {
             this.overlayLineOff();
         }
 
-        if (USE_PARTICLE_BEAM_FOR_SEARCHING === true || USE_PARTICLE_BEAM_FOR_MOVING === true) {
+        if (USE_PARTICLE_BEAM_FOR_MOVING === true) {
             this.particleBeamOff();
         }
         this.searchSphereOff();
@@ -811,8 +785,8 @@ function MyController(hand) {
         var handDeltaRotation = Quat.multiply(currentHandRotation, Quat.inverse(this.startingHandRotation));
 
         var distantPickRay = {
-            origin: Camera.position,
-            direction: Vec3.mix(Quat.getUp(this.getHandRotation()), Quat.getFront(Camera.orientation), HAND_HEAD_MIX_RATIO),
+            origin: PICK_WITH_HAND_RAY ? handPosition : Camera.position,
+            direction: PICK_WITH_HAND_RAY ? Quat.getUp(this.getHandRotation()) : Vec3.mix(Quat.getUp(this.getHandRotation()), Quat.getFront(Camera.orientation), HAND_HEAD_MIX_RATIO),
             length: PICK_MAX_DISTANCE
         };
 
@@ -897,8 +871,8 @@ function MyController(hand) {
                 grabbableData = grabbableDataForCandidate;
             }
         }
-        if (this.grabbedEntity !== null) {
-            // We've found an entity that we'll do something with.
+        if ((this.grabbedEntity !== null) && (this.triggerSmoothedGrab() || this.bumperSqueezed())) {
+            // We are squeezing enough to grab, and we've found an entity that we'll try to do something with.
             var near = (nearPickedCandidateEntities.indexOf(this.grabbedEntity) >= 0);
             var isPhysical = this.propsArePhysical(props);
 
@@ -914,17 +888,22 @@ function MyController(hand) {
             }
             // far grab or equip with action
             if (isPhysical && !near) {
+                if (entityIsGrabbedByOther(intersection.entityID)) {
+                    // don't distance grab something that is already grabbed.
+                    return;
+                }
                 this.temporaryPositionOffset = null;
                 if (typeof grabbableData.spatialKey === 'undefined') {
                     // We want to give a temporary position offset to this object so it is pulled close to hand
                     var intersectionPointToCenterDistance = Vec3.length(Vec3.subtract(intersection.intersection,
-                                                                                      intersection.properties.position));
+                        intersection.properties.position));
                     this.temporaryPositionOffset = Vec3.normalize(Vec3.subtract(intersection.properties.position, handPosition));
                     this.temporaryPositionOffset = Vec3.multiply(this.temporaryPositionOffset,
-                                                                 intersectionPointToCenterDistance *
-                                                                 FAR_TO_NEAR_GRAB_PADDING_FACTOR);
+                        intersectionPointToCenterDistance *
+                        FAR_TO_NEAR_GRAB_PADDING_FACTOR);
                 }
                 this.setState(this.state == STATE_SEARCHING ? STATE_DISTANCE_HOLDING : STATE_EQUIP);
+                this.searchSphereOff();
                 return;
             }
 
@@ -938,36 +917,18 @@ function MyController(hand) {
             this.lineOn(distantPickRay.origin, Vec3.multiply(distantPickRay.direction, LINE_LENGTH), NO_INTERSECT_COLOR);
         }
 
-        if (USE_PARTICLE_BEAM_FOR_SEARCHING === true) {
-            this.handleParticleBeam(distantPickRay.origin, this.getHandRotation(), NO_INTERSECT_COLOR);
-        }
-
-        // if (USE_OVERLAY_LINES_FOR_SEARCHING === true) {
-        //     this.overlayLineOn(searchVisualizationPickRay.origin,
-        //                        Vec3.sum(searchVisualizationPickRay.origin,
-        //                                 Vec3.multiply(searchVisualizationPickRay.direction,
-        //                                               LINE_LENGTH)),
-        //                        NO_INTERSECT_COLOR);
-        // }
+        var SEARCH_SPHERE_SIZE = 0.011;
+        var SEARCH_SPHERE_FOLLOW_RATE = 0.50;
 
         if (this.intersectionDistance > 0) {
-            var SPHERE_INTERSECTION_SIZE = 0.011;
-            var SEARCH_SPHERE_FOLLOW_RATE = 0.50;
-            var SEARCH_SPHERE_CHASE_DROP = 0.2;
-            this.searchSphereDistance = this.searchSphereDistance * SEARCH_SPHERE_FOLLOW_RATE +
-                this.intersectionDistance * (1.0 - SEARCH_SPHERE_FOLLOW_RATE);
-            var searchSphereLocation = Vec3.sum(distantPickRay.origin,
-                                                Vec3.multiply(distantPickRay.direction, this.searchSphereDistance));
-            searchSphereLocation.y -= ((this.intersectionDistance - this.searchSphereDistance) /
-                                       this.intersectionDistance) * SEARCH_SPHERE_CHASE_DROP;
-            this.searchSphereOn(searchSphereLocation,
-                                SPHERE_INTERSECTION_SIZE * this.intersectionDistance,
-                                this.triggerSmoothedGrab() ? INTERSECT_COLOR : NO_INTERSECT_COLOR);
-            if (USE_OVERLAY_LINES_FOR_SEARCHING === true) {
-                this.overlayLineOn(handPosition,
-                                   searchSphereLocation,
-                                   this.triggerSmoothedGrab() ? INTERSECT_COLOR : NO_INTERSECT_COLOR);
-            }
+            //  If we hit something with our pick ray, move the search sphere toward that distance 
+            this.searchSphereDistance = this.searchSphereDistance * SEARCH_SPHERE_FOLLOW_RATE + this.intersectionDistance * (1.0 - SEARCH_SPHERE_FOLLOW_RATE);
+        }
+
+        var searchSphereLocation = Vec3.sum(distantPickRay.origin, Vec3.multiply(distantPickRay.direction, this.searchSphereDistance));
+        this.searchSphereOn(searchSphereLocation, SEARCH_SPHERE_SIZE * this.searchSphereDistance, (this.triggerSmoothedGrab() || this.bumperSqueezed()) ? INTERSECT_COLOR : NO_INTERSECT_COLOR);
+        if ((USE_OVERLAY_LINES_FOR_SEARCHING === true) && PICK_WITH_HAND_RAY) {
+            this.overlayLineOn(handPosition, searchSphereLocation, (this.triggerSmoothedGrab() || this.bumperSqueezed()) ? INTERSECT_COLOR : NO_INTERSECT_COLOR);
         }
     };
 
@@ -1154,7 +1115,6 @@ function MyController(hand) {
                 y: this.currentObjectPosition.y,
                 z: this.currentObjectPosition.z
             }
-
         }
 
 
@@ -1167,7 +1127,6 @@ function MyController(hand) {
         }
         if (USE_PARTICLE_BEAM_FOR_MOVING === true) {
             this.handleDistantParticleBeam(handPosition, grabbedProperties.position, INTERSECT_COLOR)
-                // this.handleDistantParticleBeam(handPosition, this.currentObjectPosition, INTERSECT_COLOR)
         }
         if (USE_POINTLIGHT === true) {
             this.handlePointLight(this.grabbedEntity);
@@ -1500,7 +1459,7 @@ function MyController(hand) {
     this.continueFarTrigger = function() {
         if (this.triggerSmoothedReleased()) {
             this.setState(STATE_RELEASE);
-            Entities.callEntityMethod(this.grabbedEntity, "stopNearTrigger");
+            Entities.callEntityMethod(this.grabbedEntity, "stopFarTrigger");
             return;
         }
 
@@ -1605,8 +1564,8 @@ function MyController(hand) {
             if (this.actionID !== null) {
                 //sometimes we want things to stay right where they are when we let go.
                 var releaseVelocityData = getEntityCustomData(GRABBABLE_DATA_KEY,
-                                                              this.grabbedEntity,
-                                                              DEFAULT_GRABBABLE_DATA);
+                    this.grabbedEntity,
+                    DEFAULT_GRABBABLE_DATA);
                 if (releaseVelocityData.disableReleaseVelocity === true) {
                     Entities.deleteAction(this.grabbedEntity, this.actionID);
 
@@ -1662,7 +1621,7 @@ function MyController(hand) {
         // zero gravity and set ignoreForCollisions in a way that lets us put them back, after all grabs are done
         if (data["refCount"] == 1) {
             data["gravity"] = grabbedProperties.gravity;
-            data["collisionMask"] = grabbedProperties.collisionMask;
+            data["collidesWith"] = grabbedProperties.collidesWith;
             data["collisionsWillMove"] = grabbedProperties.collisionsWillMove;
             data["parentID"] = grabbedProperties.parentID;
             data["parentJointIndex"] = grabbedProperties.parentJointIndex;
@@ -1672,9 +1631,19 @@ function MyController(hand) {
                     y: 0,
                     z: 0
                 },
-                "collisionMask": COLLISION_MASK_WHILE_GRABBED
+                // bummer, it isn't easy to do bitwise collisionMask operations like this:
+                //"collisionMask": COLLISION_MASK_WHILE_GRABBED | grabbedProperties.collisionMask
+                // when using string values
+                "collidesWith": COLLIDES_WITH_WHILE_GRABBED
             };
             Entities.editEntity(entityID, whileHeldProperties);
+        } else if (data["refCount"] > 1) {
+            // if an object is being grabbed by more than one person (or the same person twice, but nevermind), switch
+            // the collision groups so that it wont collide with "other" avatars.  This avoids a situation where two
+            // people are holding something and one of them will be able (if the other releases at the right time) to
+            // bootstrap themselves with the held object.  This happens because the meaning of "otherAvatar" in
+            // the collision mask hinges on who the physics simulation owner is.
+            Entities.editEntity(entityID, {"collidesWith": COLLIDES_WITH_WHILE_MULTI_GRABBED});
         }
 
         setEntityCustomData(GRAB_USER_DATA_KEY, entityID, data);
@@ -1688,7 +1657,7 @@ function MyController(hand) {
             if (data["refCount"] < 1) {
                 Entities.editEntity(entityID, {
                     gravity: data["gravity"],
-                    collisionMask: data["collisionMask"],
+                    collidesWith: data["collidesWith"],
                     collisionsWillMove: data["collisionsWillMove"],
                     ignoreForCollisions: data["ignoreForCollisions"],
                     parentID: data["parentID"],
@@ -1705,12 +1674,6 @@ function MyController(hand) {
 
 var rightController = new MyController(RIGHT_HAND);
 var leftController = new MyController(LEFT_HAND);
-
-//preload the particle beams so that they are full length when you start searching
-if (USE_PARTICLE_BEAM_FOR_SEARCHING === true || USE_PARTICLE_BEAM_FOR_MOVING === true) {
-    rightController.createParticleBeam();
-    leftController.createParticleBeam();
-}
 
 var MAPPING_NAME = "com.highfidelity.handControllerGrab";
 
@@ -1788,31 +1751,7 @@ function cleanup() {
     rightController.cleanup();
     leftController.cleanup();
     Controller.disableMapping(MAPPING_NAME);
-    if (USE_PARTICLE_BEAM_FOR_SEARCHING === true || USE_PARTICLE_BEAM_FOR_MOVING === true) {
-        Script.update.disconnect(renewParticleBeamLifetimes);
-    }
+
 }
 Script.scriptEnding.connect(cleanup);
 Script.update.connect(update);
-
-// particle systems can end up hanging around if a user crashes or something else causes controller cleanup not to get called. 
-// we can't create the search system on-demand since it takes some time for the particles to reach their entire length.  
-// thus the system cannot have a fixed lifetime.  this loop updates the lifetimes and will stop updating if a user crashes.
-
-if (USE_PARTICLE_BEAM_FOR_SEARCHING === true || USE_PARTICLE_BEAM_FOR_MOVING === true) {
-    Script.update.connect(renewParticleBeamLifetimes)
-}
-
-var sinceLastParticleLifetimeUpdate = 0;
-
-function renewParticleBeamLifetimes(deltaTime) {
-    //debounce this call since we don't want it 60x a second
-    sinceLastParticleLifetimeUpdate = sinceLastParticleLifetimeUpdate + deltaTime;
-    if (sinceLastParticleLifetimeUpdate > TEMPORARY_PARTICLE_BEAM_LIFETIME - 2) {
-        sinceLastParticleLifetimeUpdate = 0;
-    } else {
-        return;
-    }
-    rightController.renewParticleBeamLifetime();
-    leftController.renewParticleBeamLifetime();
-}

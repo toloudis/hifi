@@ -41,7 +41,7 @@ void AvatarMotionState::clearIncomingDirtyFlags() {
     }
 }
 
-MotionType AvatarMotionState::computeObjectMotionType() const {
+PhysicsMotionType AvatarMotionState::computePhysicsMotionType() const {
     // TODO?: support non-DYNAMIC motion for avatars? (e.g. when sitting)
     return MOTION_TYPE_DYNAMIC;
 }
@@ -134,7 +134,7 @@ glm::vec3 AvatarMotionState::getObjectGravity() const {
 }
 
 // virtual
-const QUuid& AvatarMotionState::getObjectID() const {
+const QUuid AvatarMotionState::getObjectID() const {
     return _avatar->getSessionUUID();
 }
 
@@ -146,6 +146,6 @@ QUuid AvatarMotionState::getSimulatorID() const {
 // virtual
 void AvatarMotionState::computeCollisionGroupAndMask(int16_t& group, int16_t& mask) const {
     group = BULLET_COLLISION_GROUP_OTHER_AVATAR;
-    mask = PhysicsEngine::getCollisionMask(group);
+    mask = Physics::getDefaultCollisionMask(group);
 }
 

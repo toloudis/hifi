@@ -168,7 +168,15 @@ inline QScriptValue convertScriptValue(QScriptEngine* e, const AACube& v) { retu
         QScriptValue V = convertScriptValue(engine, G); \
         properties.setProperty(#P, V); \
     }
-    
+
+// same as COPY_PROPERTY_TO_QSCRIPTVALUE_GETTER but uses #X instead of #P in the setProperty() step
+#define COPY_PROXY_PROPERTY_TO_QSCRIPTVALUE_GETTER(p, P, X, G) \
+    if ((_desiredProperties.isEmpty() || _desiredProperties.getHasProperty(p)) && \
+        (!skipDefaults || defaultEntityProperties._##P != _##P)) { \
+        QScriptValue V = convertScriptValue(engine, G); \
+        properties.setProperty(#X, V); \
+    }
+
 #define COPY_PROPERTY_TO_QSCRIPTVALUE_GETTER_ALWAYS(P, G) \
     if (!skipDefaults || defaultEntityProperties._##P != _##P) { \
         QScriptValue V = convertScriptValue(engine, G); \
@@ -183,9 +191,9 @@ typedef QVector<bool> qVectorBool;
 typedef QVector<float> qVectorFloat;
 inline float float_convertFromScriptValue(const QScriptValue& v, bool& isValid) { return v.toVariant().toFloat(&isValid); }
 inline quint64 quint64_convertFromScriptValue(const QScriptValue& v, bool& isValid) { return v.toVariant().toULongLong(&isValid); }
-inline quint32 quint32_convertFromScriptValue(const QScriptValue& v, bool& isValid) { 
+inline quint32 quint32_convertFromScriptValue(const QScriptValue& v, bool& isValid) {
     // Use QString::toUInt() so that isValid is set to false if the number is outside the quint32 range.
-    return v.toString().toUInt(&isValid); 
+    return v.toString().toUInt(&isValid);
 }
 inline quint16 quint16_convertFromScriptValue(const QScriptValue& v, bool& isValid) { return v.toVariant().toInt(&isValid); }
 inline uint16_t uint16_t_convertFromScriptValue(const QScriptValue& v, bool& isValid) { return v.toVariant().toInt(&isValid); }

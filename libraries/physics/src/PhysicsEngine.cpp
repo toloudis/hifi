@@ -18,47 +18,10 @@
 #include "ThreadSafeDynamicsWorld.h"
 #include "PhysicsLogging.h"
 
-uint32_t PhysicsEngine::getNumSubsteps() {
-    return _numSubsteps;
-}
-
-btHashMap<btHashInt, int16_t> _collisionMasks;
-
-void initCollisionMaskTable() {
-    if (_collisionMasks.size() == 0) {
-        // build table of masks with their group as the key
-        _collisionMasks.insert(btHashInt((int)BULLET_COLLISION_GROUP_DYNAMIC), BULLET_COLLISION_MASK_DYNAMIC);
-        _collisionMasks.insert(btHashInt((int)BULLET_COLLISION_GROUP_STATIC), BULLET_COLLISION_MASK_STATIC);
-        _collisionMasks.insert(btHashInt((int)BULLET_COLLISION_GROUP_KINEMATIC), BULLET_COLLISION_MASK_KINEMATIC);
-        _collisionMasks.insert(btHashInt((int)BULLET_COLLISION_GROUP_MY_AVATAR), BULLET_COLLISION_MASK_MY_AVATAR);
-        _collisionMasks.insert(btHashInt((int)BULLET_COLLISION_GROUP_OTHER_AVATAR), BULLET_COLLISION_MASK_OTHER_AVATAR);
-        _collisionMasks.insert(btHashInt((int)BULLET_COLLISION_GROUP_COLLISIONLESS), BULLET_COLLISION_MASK_COLLISIONLESS);
-    }
-}
-
-// static
-int16_t PhysicsEngine::getCollisionMask(int16_t group) {
-    const int16_t* mask = _collisionMasks.find(btHashInt((int)group));
-    return mask ? *mask : BULLET_COLLISION_MASK_DEFAULT;
-}
-
-QUuid _sessionID;
-
-// static
-void PhysicsEngine::setSessionUUID(const QUuid& sessionID) {
-    _sessionID = sessionID;
-}
-
-// static
-const QUuid& PhysicsEngine::getSessionID() {
-    return _sessionID;
-}
-
-
 PhysicsEngine::PhysicsEngine(const glm::vec3& offset) :
         _originOffset(offset),
+        _sessionID(),
         _myAvatarController(nullptr) {
-    initCollisionMaskTable();
 }
 
 PhysicsEngine::~PhysicsEngine() {
@@ -90,6 +53,10 @@ void PhysicsEngine::init() {
     }
 }
 
+uint32_t PhysicsEngine::getNumSubsteps() {
+    return _numSubsteps;
+}
+
 // private
 void PhysicsEngine::addObjectToDynamicsWorld(ObjectMotionState* motionState) {
     assert(motionState);
@@ -98,7 +65,7 @@ void PhysicsEngine::addObjectToDynamicsWorld(ObjectMotionState* motionState) {
     float mass = 0.0f;
     // NOTE: the body may or may not already exist, depending on whether this corresponds to a reinsertion, or a new insertion.
     btRigidBody* body = motionState->getRigidBody();
-    MotionType motionType = motionState->computeObjectMotionType();
+    PhysicsMotionType motionType = motionState->computePhysicsMotionType();
     motionState->setMotionType(motionType);
     switch(motionType) {
         case MOTION_TYPE_KINEMATIC: {

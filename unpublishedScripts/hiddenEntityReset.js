@@ -177,7 +177,7 @@
                 rotation: rotation,
                 position: position,
                 shapeType: 'box',
-                collisionsWillMove: true,
+                dynamic: true,
                 script: raveStickEntityScriptURL,
                 dimensions: {
                     x: 0.06,
@@ -277,7 +277,9 @@
                 name: "pistol",
                 modelURL: modelURL,
                 position: position,
-                collisionSoundURL: "https://s3.amazonaws.com/hifi-public/sounds/Guns/Gun_Drop_and_Metalli_1.wav",
+                restitution: 0,
+                damping:0.5,
+                collisionSoundURL: "http://hifi-content.s3.amazonaws.com/james/pistol/sounds/drop.wav",
                 dimensions: {
                     x: 0.05,
                     y: 0.23,
@@ -295,7 +297,7 @@
                     y: -3.0,
                     z: 0
                 },
-                collisionsWillMove: true,
+                dynamic: true,
                 userData: JSON.stringify({
                     grabbableKey: {
                         spatialKey: {
@@ -328,10 +330,11 @@
                 z: 506.46
             };
 
+            var SCRIPT_URL = Script.resolvePath('bow.js');
             var BOW_ROTATION = Quat.fromPitchYawRollDegrees(-103.05, -178.60, -87.27);
-
             var MODEL_URL = "https://hifi-public.s3.amazonaws.com/models/bow/new/bow-deadly.fbx";
             var COLLISION_HULL_URL = "https://hifi-public.s3.amazonaws.com/models/bow/new/bow_collision_hull.obj";
+            
             var BOW_DIMENSIONS = {
                 x: 0.04,
                 y: 1.3,
@@ -344,44 +347,114 @@
                 z: 0
             };
 
-            var bow = Entities.addEntity({
-                name: 'Hifi-Bow',
-                type: "Model",
-                modelURL: MODEL_URL,
-                position: startPosition,
-                rotation: BOW_ROTATION,
-                dimensions: BOW_DIMENSIONS,
-                collisionsWillMove: true,
-                gravity: BOW_GRAVITY,
-                shapeType: 'compound',
-                compoundShapeURL: COLLISION_HULL_URL,
-                script: bowScriptURL,
-                userData: JSON.stringify({
-                    resetMe: {
-                        resetMe: true
-                    },
-                    grabbableKey: {
-                        invertSolidWhileHeld: true,
-                        spatialKey: {
-                            rightRelativePosition: {
-                                x: 0.03,
-                                y: 0.08,
-                                z: 0.11
-                            },
-                            leftRelativePosition: {
-                                x: -0.03,
-                                y: 0.08,
-                                z: 0.11
-                            },
-                            relativeRotation: Quat.fromPitchYawRollDegrees(180, 90, 90)
+            var TOP_NOTCH_OFFSET = 0.6;
+
+            var BOTTOM_NOTCH_OFFSET = 0.6;
+
+            var LINE_DIMENSIONS = {
+                x: 5,
+                y: 5,
+                z: 5
+            };
+
+            var bow;
+
+            function makeBow() {
+
+                var bowProperties = {
+                    name: 'Hifi-Bow',
+                    type: "Model",
+                    modelURL: MODEL_URL,
+                    position: startPosition,
+                    dimensions: BOW_DIMENSIONS,
+                    dynamic: true,
+                    gravity: BOW_GRAVITY,
+                    rotation: BOW_ROTATION,
+                    shapeType: 'compound',
+                    compoundShapeURL: COLLISION_HULL_URL,
+                    script: bowScriptURL,
+                    userData: JSON.stringify({
+                        resetMe: {
+                            resetMe: true
+                        },
+                        grabbableKey: {
+                            invertSolidWhileHeld: true,
+                            spatialKey: {
+                                rightRelativePosition: {
+                                    x: 0.03,
+                                    y: 0.08,
+                                    z: 0.11
+                                },
+                                leftRelativePosition: {
+                                    x: -0.03,
+                                    y: 0.08,
+                                    z: 0.11
+                                },
+                                relativeRotation: Quat.fromPitchYawRollDegrees(180, 90, 90)
+                            }
                         }
-                    }
-                })
-            });
+                    })
+                }
+                bow = Entities.addEntity(bowProperties);
+                createPreNotchString();
+            }
+            var preNotchString;
 
+            function createPreNotchString() {
+
+                var bowProperties = Entities.getEntityProperties(bow, ["position", "rotation", "userData"]);
+                var downVector = Vec3.multiply(-1, Quat.getUp(bowProperties.rotation));
+                var downOffset = Vec3.multiply(downVector, BOTTOM_NOTCH_OFFSET * 2);
+                var upVector = Quat.getUp(bowProperties.rotation);
+                var upOffset = Vec3.multiply(upVector, TOP_NOTCH_OFFSET);
+
+                var backOffset = Vec3.multiply(-0.1, Quat.getFront(bowProperties.rotation));
+                var topStringPosition = Vec3.sum(bowProperties.position, upOffset);
+                topStringPosition = Vec3.sum(topStringPosition, backOffset);
+
+                var stringProperties = {
+                    name: 'Hifi-Bow-Pre-Notch-String',
+                    type: 'Line',
+                    position: topStringPosition,
+                    rotation: Quat.fromPitchYawRollDegrees(164.6, 164.5, -72),
+                    linePoints: [{
+                        x: 0,
+                        y: 0,
+                        z: 0
+                    }, Vec3.sum({
+                        x: 0,
+                        y: 0,
+                        z: 0
+                    }, downOffset)],
+                    lineWidth: 5,
+                    color: {
+                        red: 255,
+                        green: 255,
+                        blue: 255
+                    },
+                    dimensions: LINE_DIMENSIONS,
+                    visible: true,
+                    dynamic: false,
+                    collisionless: true,
+                    parentID: bow,
+                    userData: JSON.stringify({
+                        grabbableKey: {
+                            grabbable: false
+                        }
+                    })
+                };
+
+                preNotchString = Entities.addEntity(stringProperties);
+
+                var data = {
+                    preNotchString: preNotchString
+                };
+
+                setEntityCustomData('bowKey', bow, data);
+            }
+
+            makeBow();
         }
-
-
         function createFire() {
 
 
@@ -493,8 +566,8 @@
                     y: 1.37,
                     z: 1.73
                 },
-                collisionsWillMove: true,
-                ignoreForCollisions: false,
+                dynamic: true,
+                collisionless: false,
                 compoundShapeURL: rackCollisionHullURL,
                 userData: JSON.stringify({
                     resetMe: {
@@ -541,9 +614,9 @@
                             y: -9.8,
                             z: 0
                         },
-                        collisionsWillMove: true,
+                        dynamic: true,
                         collisionSoundURL: 'http://hifi-public.s3.amazonaws.com/sounds/basketball/basketball.wav',
-                        ignoreForCollisions: false,
+                        collisionless: false,
                         modelURL: basketballURL,
                         userData: JSON.stringify({
                             originalPositionKey: {
@@ -686,7 +759,7 @@
                         type: 'Model',
                         modelURL: MODEL_URL,
                         shapeType: 'compound',
-                        collisionsWillMove: true,
+                        dynamic: true,
                         dimensions: TARGET_DIMENSIONS,
                         compoundShapeURL: COLLISION_HULL_URL,
                         position: position,
@@ -767,7 +840,7 @@
                     y: 0.30,
                     z: 0.08
                 },
-                collisionsWillMove: true,
+                dynamic: true,
                 collisionSoundURL: "http://hifi-public.s3.amazonaws.com/sounds/flashlight_drop.L.wav",
                 gravity: {
                     x: 0,
@@ -1057,7 +1130,7 @@
                     z: 0
                 },
                 shapeType: "box",
-                collisionsWillMove: true,
+                dynamic: true,
                 userData: JSON.stringify({
                     resetMe: {
                         resetMe: true
@@ -1101,7 +1174,7 @@
                     z: 0.2
                 },
                 rotation: rotation,
-                collisionsWillMove: true,
+                dynamic: true,
                 gravity: {
                     x: 0,
                     y: -100,
@@ -1152,7 +1225,7 @@
                     y: 0.21,
                     z: 0.47
                 },
-                collisionsWillMove: true,
+                dynamic: true,
                 collisionSoundURL: COLLISION_SOUND_URL,
                 userData: JSON.stringify({
                     resetMe: {
@@ -1200,7 +1273,7 @@
                     z: 0.05
                 },
                 //must be enabled to be grabbable in the physics engine
-                collisionsWillMove: true,
+                dynamic: true,
                 compoundShapeURL: WAND_COLLISION_SHAPE,
                 script: wandScriptURL,
                 userData: JSON.stringify({
@@ -1231,7 +1304,7 @@
                 type: "Model",
                 modelURL: modelURL,
                 position: position,
-                collisionsWillMove: true,
+                dynamic: true,
                 shapeType: "sphere",
                 name: "basketball",
                 dimensions: {
@@ -1291,7 +1364,7 @@
                     y: -0.1,
                     z: 0
                 },
-                collisionsWillMove: true,
+                dynamic: true,
                 userData: JSON.stringify({
                     resetMe: {
                         resetMe: true
@@ -1319,7 +1392,7 @@
                     y: 0.17,
                     z: 0.07
                 },
-                collisionsWillMove: true,
+                dynamic: true,
                 collisionSoundURL: "http://hifi-public.s3.amazonaws.com/sounds/SpryPntCnDrp1.L.wav",
                 shapeType: 'box',
                 restitution: 0,
@@ -1358,7 +1431,7 @@
                     y: 2.18,
                     z: 1.07
                 },
-                collisionsWillMove: true,
+                dynamic: true,
                 shapeType: 'box',
                 gravity: {
                     x: 0,
@@ -1402,7 +1475,7 @@
                     y: 1.56,
                     z: 1.35
                 },
-                collisionsWillMove: true,
+                dynamic: true,
                 gravity: {
                     x: 0,
                     y: -0.8,
@@ -1484,7 +1557,7 @@
                         shapeType: 'box',
                         name: "block",
                         dimensions: blockTypes[i].dimensions,
-                        collisionsWillMove: true,
+                        dynamic: true,
                         collisionSoundURL: collisionSoundURL,
                         gravity: {
                             x: 0,
