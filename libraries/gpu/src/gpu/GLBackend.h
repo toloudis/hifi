@@ -228,6 +228,8 @@ public:
 
     void do_setStateColorWriteMask(uint32 mask);
 
+	void do_setStateLineWidth(float lineWidth);
+
     // Repporting stats of the context
     class Stats {
     public:
