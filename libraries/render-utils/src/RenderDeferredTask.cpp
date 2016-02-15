@@ -71,6 +71,10 @@ void ToneMappingDeferred::run(const SceneContextPointer& sceneContext, const Ren
     _toneMappingEffect.render(renderContext->getArgs());
 }
 
+void HighlightingDeferred::run(const SceneContextPointer& sceneContext, const RenderContextPointer& renderContext) {
+	_highlightingEffect.render(renderContext->getArgs());
+}
+
 RenderDeferredTask::RenderDeferredTask(CullFunctor cullFunctor) : Task() {
     cullFunctor = cullFunctor ? cullFunctor : [](const RenderArgs*, const AABox&){ return true; };
 
@@ -130,7 +134,11 @@ RenderDeferredTask::RenderDeferredTask(CullFunctor cullFunctor) : Task() {
     addJob<ToneMappingDeferred>("ToneMapping");
     _toneMappingJobIndex = (int)_jobs.size() - 1;
 
-    // Debugging Deferred buffer job
+	// test out an outline effect.
+	addJob<HighlightingDeferred>("Highlighting");
+	_highlightingJobIndex = (int)_jobs.size() - 1;
+	
+	// Debugging Deferred buffer job
     addJob<DebugDeferredBuffer>("DebugDeferredBuffer");
     _drawDebugDeferredBufferIndex = (int)_jobs.size() - 1;
     enableJob(_drawDebugDeferredBufferIndex, false);

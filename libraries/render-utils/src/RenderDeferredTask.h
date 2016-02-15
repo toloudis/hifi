@@ -16,6 +16,7 @@
 
 #include "render/DrawTask.h"
 
+#include "HighlightingEffect.h"
 #include "ToneMappingEffect.h"
 
 class SetupDeferred {
@@ -47,6 +48,15 @@ public:
     ToneMappingEffect _toneMappingEffect;
 
     using JobModel = render::Task::Job::Model<ToneMappingDeferred>;
+};
+
+class HighlightingDeferred {
+public:
+	void run(const render::SceneContextPointer& sceneContext, const render::RenderContextPointer& renderContext);
+
+	HighlightingEffect _highlightingEffect;
+
+	using JobModel = render::Task::Job::Model<HighlightingDeferred>;
 };
 
 class DrawOpaqueDeferred {
@@ -145,6 +155,7 @@ protected:
     int _occlusionJobIndex;
     int _antialiasingJobIndex;
     int _toneMappingJobIndex;
+	int _highlightingJobIndex;
 };
 
 #endif // hifi_RenderDeferredTask_h
