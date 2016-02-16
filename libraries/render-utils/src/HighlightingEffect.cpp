@@ -92,7 +92,8 @@ void HighlightingEffect::render(RenderArgs* args) {
 	auto framebufferCache = DependencyManager::get<FramebufferCache>();
 	auto geometryCache = DependencyManager::get<GeometryCache>();
 	gpu::doInBatch(args->_context, [&](gpu::Batch& batch) {
-        auto destFbo = framebufferCache->getPrimaryFramebuffer();
+		batch.enableStereo(false);
+		auto destFbo = framebufferCache->getPrimaryFramebuffer();
         batch.setFramebuffer(destFbo);
 
 		batch.setViewportTransform(args->_viewport);
@@ -141,4 +142,11 @@ void HighlightingEffect::render(RenderArgs* args) {
 
 
 
+}
+
+void HighlightingDeferred::configure(const Config& config) {
+}
+
+void HighlightingDeferred::run(const render::SceneContextPointer& sceneContext, const render::RenderContextPointer& renderContext) {
+	_highlightingEffect.render(renderContext->args);
 }

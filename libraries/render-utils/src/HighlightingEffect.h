@@ -17,6 +17,7 @@
 
 #include <gpu/Resource.h>
 #include <gpu/Pipeline.h>
+#include <render/DrawTask.h>
 
 class RenderArgs;
 
@@ -45,5 +46,17 @@ private:
 
     void init();
 };
+
+class HighlightingDeferred {
+public:
+	using Config = render::Job::Config;
+	using JobModel = render::Job::Model<HighlightingDeferred>;
+
+	void configure(const Config& config);
+	void run(const render::SceneContextPointer& sceneContext, const render::RenderContextPointer& renderContext);
+
+	HighlightingEffect _highlightingEffect;
+};
+
 
 #endif // hifi_HighlightingEffect_h
