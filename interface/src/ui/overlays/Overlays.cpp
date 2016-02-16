@@ -30,15 +30,23 @@
 #include "Sphere3DOverlay.h"
 #include "Grid3DOverlay.h"
 #include "TextOverlay.h"
+#include "RectangleOverlay.h"
 #include "Text3DOverlay.h"
 #include "Web3DOverlay.h"
 #include <QtQuick/QQuickWindow>
 
 
 Overlays::Overlays() : _nextOverlayID(1) {
+    connect(qApp, &Application::beforeAboutToQuit, [=] {
+        cleanupAllOverlays();
+    });
 }
 
 Overlays::~Overlays() {
+}
+
+
+void Overlays::cleanupAllOverlays() {
     {
         QWriteLocker lock(&_lock);
         QWriteLocker deleteLock(&_deleteLock);
@@ -52,7 +60,6 @@ Overlays::~Overlays() {
         _overlaysWorld.clear();
         _panels.clear();
     }
-    
     cleanupOverlaysToDelete();
 }
 
@@ -175,6 +182,8 @@ unsigned int Overlays::addOverlay(const QString& type, const QScriptValue& prope
         thisOverlay = std::make_shared<ModelOverlay>();
     } else if (type == Web3DOverlay::TYPE) {
         thisOverlay = std::make_shared<Web3DOverlay>();
+    } else if (type == RectangleOverlay::TYPE) {
+        thisOverlay = std::make_shared<RectangleOverlay>();
     }
 
     if (thisOverlay) {
@@ -373,7 +382,7 @@ OverlayPropertyResult Overlays::getProperty(unsigned int id, const QString& prop
     OverlayPropertyResult result;
     Overlay::Pointer thisOverlay = getOverlay(id);
     QReadLocker lock(&_lock);
-    if (thisOverlay) {
+    if (thisOverlay && thisOverlay->supportsGetProperty()) {
         result.value = thisOverlay->getProperty(property);
     }
     return result;

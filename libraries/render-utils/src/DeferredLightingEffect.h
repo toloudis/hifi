@@ -46,7 +46,7 @@ public:
     void prepare(RenderArgs* args);
     void render(const render::RenderContextPointer& renderContext);
 
-    void setupTransparent(RenderArgs* args, int lightBufferUnit);
+    void setupBatch(gpu::Batch& batch, int lightBufferUnit);
 
     // update global lighting
     void setAmbientLightMode(int preset);
@@ -54,13 +54,16 @@ public:
     void setGlobalSkybox(const model::SkyboxPointer& skybox);
 
     const LightStage& getLightStage() { return _lightStage; }
-    void setShadowMapStatus(bool enable) { _shadowMapStatus = enable; };
+    void setShadowMapEnabled(bool enable) { _shadowMapEnabled = enable; };
+    void setAmbientOcclusionEnabled(bool enable) { _ambientOcclusionEnabled = enable; }
 
 private:
-    LightStage _lightStage;
-    bool _shadowMapStatus{ false };
-
     DeferredLightingEffect() = default;
+
+    LightStage _lightStage;
+
+    bool _shadowMapEnabled{ false };
+    bool _ambientOcclusionEnabled{ false };
 
     model::MeshPointer _spotLightMesh;
     model::MeshPointer getSpotLightMesh();

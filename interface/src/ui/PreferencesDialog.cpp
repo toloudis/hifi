@@ -24,6 +24,10 @@
 #include "Snapshot.h"
 #include "UserActivityLogger.h"
 
+#include "AmbientOcclusionEffect.h"
+#include "AntialiasingEffect.h"
+#include "RenderShadowTask.h"
+
 void setupPreferences() {
     auto preferences = DependencyManager::get<Preferences>();
 
@@ -187,6 +191,24 @@ void setupPreferences() {
         preferences->addPreference(preference);
     }
 
+    static const QString AVATAR_CAMERA { "Avatar Camera" };
+    {
+        auto getter = [=]()->float { return myAvatar->getPitchSpeed(); };
+        auto setter = [=](float value) { myAvatar->setPitchSpeed(value); };
+        auto preference = new SpinnerPreference(AVATAR_CAMERA, "Camera Pitch Speed (degrees/second)", getter, setter);
+        preference->setMin(1.0f);
+        preference->setMax(360.0f);
+        preferences->addPreference(preference);
+    }
+    {
+        auto getter = [=]()->float { return myAvatar->getYawSpeed(); };
+        auto setter = [=](float value) { myAvatar->setYawSpeed(value); };
+        auto preference = new SpinnerPreference(AVATAR_CAMERA, "Camera Yaw Speed (degrees/second)", getter, setter);
+        preference->setMin(1.0f);
+        preference->setMax(360.0f);
+        preferences->addPreference(preference);
+    }
+
     static const QString AUDIO("Audio");
     {
         auto getter = []()->bool {return DependencyManager::get<AudioClient>()->getReceivedAudioStream().getDynamicJitterBuffers(); };
@@ -309,5 +331,37 @@ void setupPreferences() {
         preference->setMax(100);
         preference->setStep(1);
         preferences->addPreference(preference);
+    }
+
+    {
+        static const QString RENDER("Graphics");
+        auto renderConfig = qApp->getRenderEngine()->getConfiguration();
+
+        auto ambientOcclusionConfig = renderConfig->getConfig<AmbientOcclusionEffect>();
+        {
+            auto getter = [ambientOcclusionConfig]()->QString { return ambientOcclusionConfig->getPreset(); };
+            auto setter = [ambientOcclusionConfig](QString preset) { ambientOcclusionConfig->setPreset(preset); };
+            auto preference = new ComboBoxPreference(RENDER, "Ambient Occlusion", getter, setter);
+            preference->setItems(ambientOcclusionConfig->getPresetList());
+            preferences->addPreference(preference);
+        }
+
+        auto antialiasingConfig = renderConfig->getConfig<Antialiasing>();
+        {
+            auto getter = [antialiasingConfig]()->QString { return antialiasingConfig->getPreset(); };
+            auto setter = [antialiasingConfig](QString preset) { antialiasingConfig->setPreset(preset); };
+            auto preference = new ComboBoxPreference(RENDER, "Antialiasing", getter, setter);
+            preference->setItems(antialiasingConfig->getPresetList());
+            preferences->addPreference(preference);
+        }
+
+        auto shadowConfig = renderConfig->getConfig<RenderShadowTask>();
+        {
+            auto getter = [shadowConfig]()->QString { return shadowConfig->getPreset(); };
+            auto setter = [shadowConfig](QString preset) { shadowConfig->setPreset(preset); };
+            auto preference = new ComboBoxPreference(RENDER, "Shadows", getter, setter);
+            preference->setItems(shadowConfig->getPresetList());
+            preferences->addPreference(preference);
+        }
     }
 }

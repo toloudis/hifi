@@ -32,6 +32,7 @@
 #include "devices/Faceshift.h"
 #include "input-plugins/SpacemouseManager.h"
 #include "MainWindow.h"
+#include "render/DrawStatus.h"
 #include "scripting/MenuScriptingInterface.h"
 #include "ui/AssetUploadDialogFactory.h"
 #include "ui/DialogsManager.h"
@@ -249,6 +250,11 @@ Menu::Menu() {
     // View > Mini Mirror
     addCheckableActionToQMenuAndActionHash(viewMenu, MenuOption::MiniMirror, 0, false);
 
+    // View > Center Player In View
+    addCheckableActionToQMenuAndActionHash(viewMenu, MenuOption::CenterPlayerInView,
+        0, true, qApp, SLOT(rotationModeChanged()),
+        UNSPECIFIED_POSITION, "Advanced");
+
 
     // Navigate menu ----------------------------------
     MenuWrapper* navigateMenu = addMenu("Navigate");
@@ -306,6 +312,12 @@ Menu::Menu() {
         DependencyManager::get<OffscreenUi>()->toggle(QString("hifi/dialogs/AudioPreferencesDialog.qml"), "AudioPreferencesDialog");
     });
 
+    // Settings > Graphics...
+    action = addActionToQMenuAndActionHash(settingsMenu, "Graphics...");
+    connect(action, &QAction::triggered, [] {
+        DependencyManager::get<OffscreenUi>()->toggle(QString("hifi/dialogs/GraphicsPreferencesDialog.qml"), "GraphicsPreferencesDialog");
+    });
+
     // Settings > LOD...-- FIXME: needs implementation
     action = addActionToQMenuAndActionHash(settingsMenu, "LOD...");
     connect(action, &QAction::triggered, [] {
@@ -336,9 +348,6 @@ Menu::Menu() {
     // Developer > Render >>>
     MenuWrapper* renderOptionsMenu = developerMenu->addMenu("Render");
     addCheckableActionToQMenuAndActionHash(renderOptionsMenu, MenuOption::WorldAxes);
-    addCheckableActionToQMenuAndActionHash(renderOptionsMenu, MenuOption::DebugAmbientOcclusion);
-    addCheckableActionToQMenuAndActionHash(renderOptionsMenu, MenuOption::DebugShadows);
-    addCheckableActionToQMenuAndActionHash(renderOptionsMenu, MenuOption::Antialiasing);
     addCheckableActionToQMenuAndActionHash(renderOptionsMenu, MenuOption::Stars, 0, true);
 
     // Developer > Render > Ambient Light
@@ -482,6 +491,10 @@ Menu::Menu() {
     addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::DisableEyelidAdjustment, 0, false);
     addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::TurnWithHead, 0, false);
     addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::ComfortMode, 0, true);
+    addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::UseAnimPreAndPostRotations, 0, false,
+        avatar, SLOT(setUseAnimPreAndPostRotations(bool)));
+    addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::EnableInverseKinematics, 0, true,
+        avatar, SLOT(setEnableInverseKinematics(bool)));
 
     addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::KeyboardMotorControl,
         Qt::CTRL | Qt::SHIFT | Qt::Key_K, true, avatar, SLOT(updateMotionBehaviorFromMenu()),
@@ -590,7 +603,11 @@ Menu::Menu() {
 
     // Developer > Physics >>>
     MenuWrapper* physicsOptionsMenu = developerMenu->addMenu("Physics");
-    addCheckableActionToQMenuAndActionHash(physicsOptionsMenu, MenuOption::PhysicsShowOwned);
+    {
+        auto drawStatusConfig = qApp->getRenderEngine()->getConfiguration()->getConfig<render::DrawStatus>();
+        addCheckableActionToQMenuAndActionHash(physicsOptionsMenu, MenuOption::PhysicsShowOwned,
+            0, false, drawStatusConfig, SLOT(setShowNetwork(bool)));
+    }
     addCheckableActionToQMenuAndActionHash(physicsOptionsMenu, MenuOption::PhysicsShowHulls);
 
     // Developer > Display Crash Options
@@ -630,11 +647,6 @@ Menu::Menu() {
 
     addCheckableActionToQMenuAndActionHash(avatarMenu, MenuOption::NamesAboveHeads, 0, true, 
                 NULL, NULL, UNSPECIFIED_POSITION, "Advanced");
-    
-    addCheckableActionToQMenuAndActionHash(viewMenu, MenuOption::CenterPlayerInView,
-                                           0, false, qApp, SLOT(rotationModeChanged()),
-                                           UNSPECIFIED_POSITION, "Advanced");
-
 #endif
 }
 

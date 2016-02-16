@@ -162,7 +162,7 @@ void DeferredLightingEffect::prepare(RenderArgs* args) {
 }
 
 void DeferredLightingEffect::render(const render::RenderContextPointer& renderContext) {
-    auto args = renderContext->getArgs();
+    auto args = renderContext->args;
     gpu::doInBatch(args->_context, [&](gpu::Batch& batch) {
         
         // Allocate the parameters buffer used by all the deferred shaders
@@ -188,16 +188,17 @@ void DeferredLightingEffect::render(const render::RenderContextPointer& renderCo
         batch.setViewportTransform(args->_viewport);
         batch.setStateScissorRect(args->_viewport);
 
-        // BInd the G-Buffer surfaces
+        // Bind the G-Buffer surfaces
         batch.setResourceTexture(DEFERRED_BUFFER_COLOR_UNIT, framebufferCache->getDeferredColorTexture());
         batch.setResourceTexture(DEFERRED_BUFFER_NORMAL_UNIT, framebufferCache->getDeferredNormalTexture());
         batch.setResourceTexture(DEFERRED_BUFFER_EMISSIVE_UNIT, framebufferCache->getDeferredSpecularTexture());
         batch.setResourceTexture(DEFERRED_BUFFER_DEPTH_UNIT, framebufferCache->getPrimaryDepthTexture());
 
-        // need to assign the white texture if ao is off
-        if (renderContext->getOcclusionStatus()) {
+        // FIXME: Different render modes should have different tasks
+        if (args->_renderMode == RenderArgs::DEFAULT_RENDER_MODE && _ambientOcclusionEnabled) {
             batch.setResourceTexture(DEFERRED_BUFFER_OBSCURANCE_UNIT, framebufferCache->getOcclusionTexture());
         } else {
+            // need to assign the white texture if ao is off
             batch.setResourceTexture(DEFERRED_BUFFER_OBSCURANCE_UNIT, textureCache->getWhiteTexture());
         }
 
@@ -313,12 +314,12 @@ void DeferredLightingEffect::render(const render::RenderContextPointer& renderCo
             {
                 bool useSkyboxCubemap = (_skybox) && (_skybox->getCubemap());
 
-                auto& program = _shadowMapStatus ? _directionalLightShadow : _directionalLight;
-                LightLocationsPtr locations = _shadowMapStatus ? _directionalLightShadowLocations : _directionalLightLocations;
+                auto& program = _shadowMapEnabled ? _directionalLightShadow : _directionalLight;
+                LightLocationsPtr locations = _shadowMapEnabled ? _directionalLightShadowLocations : _directionalLightLocations;
 
                 // Setup the global directional pass pipeline
                 {
-                    if (_shadowMapStatus) {
+                    if (_shadowMapEnabled) {
                         if (useSkyboxCubemap) {
                             program = _directionalSkyboxLightShadow;
                             locations = _directionalSkyboxLightShadowLocations;
@@ -511,9 +512,10 @@ void DeferredLightingEffect::render(const render::RenderContextPointer& renderCo
     }
 }
 
-void DeferredLightingEffect::setupTransparent(RenderArgs* args, int lightBufferUnit) {
+void DeferredLightingEffect::setupBatch(gpu::Batch& batch, int lightBufferUnit) {
+    PerformanceTimer perfTimer("DLE->setupBatch()");
     auto globalLight = _allocatedLights[_globalLights.front()];
-    args->_batch->setUniformBuffer(lightBufferUnit, globalLight->getSchemaBuffer());
+    batch.setUniformBuffer(lightBufferUnit, globalLight->getSchemaBuffer());
 }
 
 static void loadLightProgram(const char* vertSource, const char* fragSource, bool lightVolume, gpu::PipelinePointer& pipeline, LightLocationsPtr& locations) {

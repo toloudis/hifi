@@ -64,7 +64,7 @@
         function createEmitNumberPropertyUpdateFunction(propertyName) {
             return function() {
                 EventBridge.emitWebEvent(
-                    '{ "type":"update", "properties":{"' + propertyName + '":' + this.value + '}}'
+                    '{ "type":"update", "properties":{"' + propertyName + '":' + parseFloat(this.value).toFixed(2) + '}}'
                 );
             };
         }
@@ -308,6 +308,11 @@
                 allSections.push(elWebSections);
                 var elWebSourceURL = document.getElementById("property-web-source-url");
     
+
+                var elHyperlinkHref = document.getElementById("property-hyperlink-href");
+                var elHyperlinkDescription = document.getElementById("property-hyperlink-description");
+                var elHyperlinkSections = document.querySelectorAll(".hyperlink-section");
+
                 var elParticleSections = document.querySelectorAll(".particle-section");
                 allSections.push(elParticleSections);
                 var elParticleIsEmitting = document.getElementById("property-particle-is-emitting");
@@ -369,9 +374,6 @@
                 var elXTextureURL = document.getElementById("property-x-texture-url");
                 var elYTextureURL = document.getElementById("property-y-texture-url");
                 var elZTextureURL = document.getElementById("property-z-texture-url");
-    
-                var elHyperlinkHref = document.getElementById("property-hyperlink-href");
-                var elHyperlinkDescription = document.getElementById("property-hyperlink-description");
     
                 var elPreviewCameraButton = document.getElementById("preview-camera-button");
     
@@ -492,8 +494,12 @@
                                     for (var j = 0; j < allSections[i].length; j++) {
                                         allSections[i][j].style.display = 'none';
                                     }
+                                }                                    
+
+                                for (var i = 0; i < elHyperlinkSections.length; i++) {
+                                    elHyperlinkSections[i].style.display = 'block';
                                 }
-    
+
                                 if (properties.type == "Box" || properties.type == "Sphere" || properties.type == "ParticleEffect") {
                                     elColorSection.style.display = 'block';
                                     elColorRed.value = properties.color.red;
@@ -525,6 +531,9 @@
                                 } else if (properties.type == "Web") {
                                     for (var i = 0; i < elWebSections.length; i++) {
                                         elWebSections[i].style.display = 'block';
+                                    }
+                                    for (var i = 0; i < elHyperlinkSections.length; i++) {
+                                        elHyperlinkSections[i].style.display = 'none';
                                     }
     
                                     elWebSourceURL.value = properties.sourceUrl;
@@ -976,18 +985,199 @@
             </div>
         </div>
 
+        <div class="section-header text-section">
+            <label>Text</label>
+        </div>
 
-        <div class="section-header">
+        <div class="text-section property">
+            <div class="label">Text Content</div>
+            <div class="value">
+                <input type="text" id="property-text-text">
+            </div>
+        </div>
+        <div class="text-section property">
+            <div class="label">Line Height</div>
+            <div class="value">
+                <input class="coord" type='number' id="property-text-line-height" min="0" step="0.005">
+            </div>
+        </div>
+        <div class="text-section property">
+            <div class="label">Text Color</div>
+            <div class="value">
+                <div class='color-picker' id="property-text-text-color"></div>
+                <div class="input-area">R <input class="coord" type='number' id="property-text-text-color-red"></div>
+                <div class="input-area">G <input class="coord" type='number' id="property-text-text-color-green"></div>
+                <div class="input-area">B <input class="coord" type='number' id="property-text-text-color-blue"></div>
+            </div>
+        </div>
+        <div class="text-section property">
+            <div class="label">Background Color</div>
+            <div class="value">
+                <div class='color-picker' id="property-text-background-color"></div>
+                <div class="input-area">R <input class="coord" type='number' id="property-text-background-color-red"></div>
+                <div class="input-area">G <input class="coord" type='number' id="property-text-background-color-green"></div>
+                <div class="input-area">B <input class="coord" type='number' id="property-text-background-color-blue"></div>
+        
+            </div>
+        </div>
+        
+        <div class="section-header zone-section">
+            <label>Zone</label>
+        </div>
+
+        <div class="zone-section property">
+            <span class="label">Stage Sun Model Enabled</span>
+            <span class="value">
+                <input type='checkbox' id="property-zone-stage-sun-model-enabled">
+            </span>
+        </div>
+
+        <div class="sub-section-header zone-section keyLight-section">
+            <label>KeyLight</label>
+        </div>
+
+        <div class="zone-section keyLight-section property">
+            <div class="label">Light Color</div>
+            <div class="value">
+                <div class='color-picker' id="property-zone-key-light-color"></div>
+                <div class="input-area">R <input class="coord" type='number' id="property-zone-key-light-color-red" min="0" max="255" step="1"></div>
+                <div class="input-area">G <input class="coord" type='number' id="property-zone-key-light-color-green" min="0" max="255" step="1"></div>
+                <div class="input-area">B <input class="coord" type='number' id="property-zone-key-light-color-blue" min="0" max="255" step="1"></div>
+            </div>
+        </div>
+
+        <div class="zone-section keyLight-section property">
+            <div class="label">Light Intensity</div>
+            <div class="value">
+                <input class="coord" type='number' id="property-zone-key-intensity" min="0" max="10" step="0.1">
+            </div>
+        </div>
+        
+        <div class="zone-section keyLight-section property">
+            <div class="label">Light Direction</div>
+            <div class="value">
+                <div class="input-area">Pitch <input class="coord" type='number' id="property-zone-key-light-direction-x"></div>
+                <div class="input-area">Yaw <input class="coord" type='number' id="property-zone-key-light-direction-y"></div>
+                <div class="input-area">Roll <input class="coord" type='number' id="property-zone-key-light-direction-z"></div>
+            </div>
+        </div>
+
+        <div class="zone-section keyLight-section property">
+            <div class="label">Ambient Intensity</div>
+            <div class="value">
+                <input class="coord" type='number' id="property-zone-key-ambient-intensity" min="0" max="10" step="0.1">
+            </div>
+        </div>
+
+        
+        <div class="zone-section keyLight-section property">
+            <div class="label">Ambient URL</div>
+            <div class="value">
+                <input type="text" id="property-zone-key-ambient-url" class="url">
+            </div>
+        </div>
+
+        <div class="sub-section-header zone-section stage-section">
+            <label>Stage</label>
+        </div>
+
+        <div class="zone-section stage-section property">
+            <div class="label">Stage Latitude</div>
+            <div class="value">
+                <input class="coord" type='number' id="property-zone-stage-latitude" min="-90" max="90" step="1">
+            </div>
+        </div>
+        <div class="zone-section stage-section property">
+            <div class="label">Stage Longitude</div>
+            <div class="value">
+                <input class="coord" type='number' id="property-zone-stage-longitude" min="-180" max="180" step="1">
+            </div>
+        </div>
+        <div class="zone-section stage-section property">
+            <div class="label">Stage Altitude</div>
+            <div class="value">
+                <input class="coord" type='number' id="property-zone-stage-altitude" step="1">
+            </div>
+        </div>
+
+        <div class="zone-section stage-section property">
+            <span class="label">Automatically calculate stage hour and day from location and clock.</span>
+            <span class="value">
+                <input type='checkbox' id="property-zone-stage-automatic-hour-day">
+            </span>
+        </div>
+
+        <div class="zone-section stage-section property">
+            <div class="label">Stage Day</div>
+            <div class="value">
+                <input class="coord" type='number' id="property-zone-stage-day" min="0" max="365" step="1">
+            </div>
+        </div>
+        <div class="zone-section stage-section property">
+            <div class="label">Stage Hour</div>
+            <div class="value">
+                <input class="coord" type='number' id="property-zone-stage-hour" min="0" max="24" step="0.5">
+            </div>
+        </div>
+
+        <div class="sub-section-header zone-section background-section">
+            <label>Background</label>
+        </div>
+
+        <div class="zone-section background-section property">
+            <div class="label">Background Mode</div>
+            <div class="value">
+                <select name="SelectBackgroundMode" id="property-zone-background-mode">
+                    <option value='inherit'>Nothing</option>
+                    <option value='skybox'>Skybox</option>
+                </select> 
+            </div>
+        </div>
+        <div class="sub-section-header zone-section skybox-section">
+            <label>Skybox</label>
+        </div>
+
+        <div class="zone-section skybox-section property">
+            <div class="label">Skybox Color</div>
+            <div class="value">
+                <div class='color-picker' id="property-zone-skybox-color"></div>
+                <div class="input-area">R <input class="coord" type='number' id="property-zone-skybox-color-red"></div>
+                <div class="input-area">G <input class="coord" type='number' id="property-zone-skybox-color-green"></div>
+                <div class="input-area">B <input class="coord" type='number' id="property-zone-skybox-color-blue"></div>
+            </div>
+        </div>
+
+        <div class="zone-section skybox-section property">
+            <div class="label">Skybox URL</div>
+            <div class="value">
+                <input type="text" id="property-zone-skybox-url" class="url">
+            </div>
+        </div>
+
+        <div class="section-header web-section">
+            <label>Web</label>
+        </div>
+
+        <div class="web-section property">
+            <div class="label">Source URL</div>
+            <div class="value">
+                <input type="text" id="property-web-source-url" class="url">
+
+            </div>
+        </div>
+
+
+        <div class="section-header hyperlink-section">
             <label>Hyperlink</label>
         </div>
 
-        <div class="property">
-            <div class="label">Href</div>
+        <div class="hyperlink-section property">
+            <div class="label">Href - Hifi://address</div>
             <div class="value">
                 <input id="property-hyperlink-href" class="url">
             </div>
         </div>
-        <div class="property">
+        <div class="hyperlink-section property">
             <div class="label">Description</div>
             <div class="value">
                 <input id="property-hyperlink-description" class="url">
@@ -1311,18 +1501,6 @@
         </div>
 
 
-        <div class="section-header web-section">
-            <label>Web</label>
-        </div>
-
-        <div class="web-section property">
-            <div class="label">Source URL</div>
-            <div class="value">
-                <input type="text" id="property-web-source-url" class="url">
-            </div>
-        </div>
-
-
         <div class="section-header particle-section">
             <label>Particle</label>
         </div>
@@ -1365,41 +1543,7 @@
         </div>
 
 
-        <div class="section-header text-section">
-            <label>Text</label>
-        </div>
-
-        <div class="text-section property">
-            <div class="label">Text Content</div>
-            <div class="value">
-                <input type="text" id="property-text-text">
-            </div>
-        </div>
-        <div class="text-section property">
-            <div class="label">Line Height</div>
-            <div class="value">
-                <input class="coord" type='number' id="property-text-line-height" min="0" step="0.005">
-            </div>
-        </div>
-        <div class="text-section property">
-            <div class="label">Text Color</div>
-            <div class="value">
-                <div class='color-picker' id="property-text-text-color"></div>
-                <div class="input-area">R <input class="coord" type='number' id="property-text-text-color-red"></div>
-                <div class="input-area">G <input class="coord" type='number' id="property-text-text-color-green"></div>
-                <div class="input-area">B <input class="coord" type='number' id="property-text-text-color-blue"></div>
-            </div>
-        </div>
-        <div class="text-section property">
-            <div class="label">Background Color</div>
-            <div class="value">
-                <div class='color-picker' id="property-text-background-color"></div>
-                <div class="input-area">R <input class="coord" type='number' id="property-text-background-color-red"></div>
-                <div class="input-area">G <input class="coord" type='number' id="property-text-background-color-green"></div>
-                <div class="input-area">B <input class="coord" type='number' id="property-text-background-color-blue"></div>
-            </div>
-        </div>
-
+        
 
         <div class="section-header light-section">
             <label>Light</label>
@@ -1436,141 +1580,6 @@
             <div class="label">Spot Light Cutoff (degrees)</div>
             <div class="value">
                 <input class="coord" type='number' id="property-light-cutoff">
-            </div>
-        </div>
-
-
-        <div class="section-header zone-section">
-            <label>Zone</label>
-        </div>
-
-        <div class="zone-section property">
-            <span class="label">Stage Sun Model Enabled</span>
-            <span class="value">
-                <input type='checkbox' id="property-zone-stage-sun-model-enabled">
-            </span>
-        </div>
-
-        <div class="sub-section-header zone-section keyLight-section">
-            <label>KeyLight</label>
-        </div>
-
-        <div class="zone-section keyLight-section property">
-            <div class="label">Light Color</div>
-            <div class="value">
-                <div class='color-picker' id="property-zone-key-light-color"></div>
-                <div class="input-area">R <input class="coord" type='number' id="property-zone-key-light-color-red" min="0" max="255" step="1"></div>
-                <div class="input-area">G <input class="coord" type='number' id="property-zone-key-light-color-green" min="0" max="255" step="1"></div>
-                <div class="input-area">B <input class="coord" type='number' id="property-zone-key-light-color-blue" min="0" max="255" step="1"></div>
-            </div>
-        </div>
-
-        <div class="zone-section keyLight-section property">
-            <div class="label">Light Intensity</div>
-            <div class="value">
-                <input class="coord" type='number' id="property-zone-key-intensity" min="0" max="10" step="0.1">
-            </div>
-        </div>
-        
-        <div class="zone-section keyLight-section property">
-            <div class="label">Light Direction</div>
-            <div class="value">
-                <div class="input-area">Pitch <input class="coord" type='number' id="property-zone-key-light-direction-x"></div>
-                <div class="input-area">Yaw <input class="coord" type='number' id="property-zone-key-light-direction-y"></div>
-                <div class="input-area">Roll <input class="coord" type='number' id="property-zone-key-light-direction-z"></div>
-            </div>
-        </div>
-
-        <div class="zone-section keyLight-section property">
-            <div class="label">Ambient Intensity</div>
-            <div class="value">
-                <input class="coord" type='number' id="property-zone-key-ambient-intensity" min="0" max="10" step="0.1">
-            </div>
-        </div>
-
-        
-        <div class="zone-section keyLight-section property">
-            <div class="label">Ambient URL</div>
-            <div class="value">
-                <input type="text" id="property-zone-key-ambient-url" class="url">
-            </div>
-        </div>
-
-        <div class="sub-section-header zone-section stage-section">
-            <label>Stage</label>
-        </div>
-
-        <div class="zone-section stage-section property">
-            <div class="label">Stage Latitude</div>
-            <div class="value">
-                <input class="coord" type='number' id="property-zone-stage-latitude" min="-90" max="90" step="1">
-            </div>
-        </div>
-        <div class="zone-section stage-section property">
-            <div class="label">Stage Longitude</div>
-            <div class="value">
-                <input class="coord" type='number' id="property-zone-stage-longitude" min="-180" max="180" step="1">
-            </div>
-        </div>
-        <div class="zone-section stage-section property">
-            <div class="label">Stage Altitude</div>
-            <div class="value">
-                <input class="coord" type='number' id="property-zone-stage-altitude" step="1">
-            </div>
-        </div>
-
-        <div class="zone-section stage-section property">
-            <span class="label">Automatically calculate stage hour and day from location and clock.</span>
-            <span class="value">
-                <input type='checkbox' id="property-zone-stage-automatic-hour-day">
-            </span>
-        </div>
-
-        <div class="zone-section stage-section property">
-            <div class="label">Stage Day</div>
-            <div class="value">
-                <input class="coord" type='number' id="property-zone-stage-day" min="0" max="365" step="1">
-            </div>
-        </div>
-        <div class="zone-section stage-section property">
-            <div class="label">Stage Hour</div>
-            <div class="value">
-                <input class="coord" type='number' id="property-zone-stage-hour" min="0" max="24" step="0.5">
-            </div>
-        </div>
-
-        <div class="sub-section-header zone-section background-section">
-            <label>Background</label>
-        </div>
-
-        <div class="zone-section background-section property">
-            <div class="label">Background Mode</div>
-            <div class="value">
-                <select name="SelectBackgroundMode" id="property-zone-background-mode">
-                    <option value='inherit'>Nothing</option>
-                    <option value='skybox'>Skybox</option>
-                </select> 
-            </div>
-        </div>
-
-
-        <div class="sub-section-header zone-section skybox-section">
-            <label>Skybox</label>
-        </div>
-
-        <div class="zone-section skybox-section property">
-            <div class="label">Skybox Color</div>
-            <div class="value">
-                <div class='color-picker' id="property-zone-skybox-color"></div>
-                <div class="input-area">R <input class="coord" type='number' id="property-zone-skybox-color-red"></div>
-                <div class="input-area">G <input class="coord" type='number' id="property-zone-skybox-color-green"></div>
-                <div class="input-area">B <input class="coord" type='number' id="property-zone-skybox-color-blue"></div>
-            </div>
-        </div>
-        <div class="zone-section skybox-section property">
-            <div class="label">Skybox URL</div>
-            <div class="value">
-                <input type="text" id="property-zone-skybox-url" class="url">
             </div>
         </div>
     </div>

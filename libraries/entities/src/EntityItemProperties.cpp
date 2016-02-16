@@ -321,6 +321,11 @@ QScriptValue EntityItemProperties::copyToScriptValue(QScriptEngine* engine, bool
     QScriptValue properties = engine->newObject();
     EntityItemProperties defaultEntityProperties;
 
+    if (_created == UNKNOWN_CREATED_TIME) {
+        // No entity properties can have been set so return without setting any default, zero property values.
+        return properties;
+    }
+
     if (_idSet) {
         COPY_PROPERTY_TO_QSCRIPTVALUE_GETTER_ALWAYS(id, _id.toString());
     }
@@ -905,7 +910,7 @@ bool EntityItemProperties::encodeEntityEditPacket(PacketType command, EntityItem
     success = packetData->startSubTree(octcode);
     delete[] octcode;
 
-    // assuming we have rome to fit our octalCode, proceed...
+    // assuming we have room to fit our octalCode, proceed...
     if (success) {
 
         // Now add our edit content details...

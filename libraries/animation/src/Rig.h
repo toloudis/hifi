@@ -73,6 +73,13 @@ public:
         glm::quat rightOrientation = glm::quat(); // rig space (z forward)
     };
 
+    enum class CharacterControllerState {
+        Ground = 0,
+        Takeoff,
+        InAir,
+        Hover
+    };
+
     virtual ~Rig() {}
 
     void destroyAnimGraph();
@@ -141,7 +148,7 @@ public:
     glm::mat4 getJointTransform(int jointIndex) const;
 
     // Start or stop animations as needed.
-    void computeMotionAnimationState(float deltaTime, const glm::vec3& worldPosition, const glm::vec3& worldVelocity, const glm::quat& worldRotation, bool isHovering);
+    void computeMotionAnimationState(float deltaTime, const glm::vec3& worldPosition, const glm::vec3& worldVelocity, const glm::quat& worldRotation, CharacterControllerState ccState);
 
     // Regardless of who started the animations or how many, update the joints.
     void updateAnimations(float deltaTime, glm::mat4 rootTransform);
@@ -208,6 +215,8 @@ public:
 
     void computeAvatarBoundingCapsule(const FBXGeometry& geometry, float& radiusOut, float& heightOut, glm::vec3& offsetOut) const;
 
+    void setEnableInverseKinematics(bool enable);
+
  protected:
     bool isIndexValid(int index) const { return _animSkeleton && index >= 0 && index < _animSkeleton->getNumJoints(); }
     void updateAnimationStateHandlers();
@@ -269,7 +278,9 @@ public:
         Idle = 0,
         Turn,
         Move,
-        Hover
+        Hover,
+        Takeoff,
+        InAir
     };
     RigRole _state { RigRole::Idle };
     RigRole _desiredState { RigRole::Idle };
@@ -289,6 +300,9 @@ public:
 
     std::map<QString, AnimNode::Pointer> _origRoleAnimations;
     std::vector<AnimNode::Pointer> _prefetchedAnimations;
+
+    bool _lastEnableInverseKinematics { true };
+    bool _enableInverseKinematics { true };
 
 private:
     QMap<int, StateHandler> _stateHandlers;
