@@ -78,7 +78,7 @@ const GLBackend::GLState::Commands makeResetStateCommands() {
         
         std::make_shared<Command1U>(&GLBackend::do_setStateColorWriteMask, DEFAULT.colorWriteMask),
 
-		std::make_shared<Command1F>(&GLBackend::do_setStateLineWidth, DEFAULT.lineWidth)
+        std::make_shared<Command1F>(&GLBackend::do_setStateLineWidth, DEFAULT.lineWidth)
 
     };
 }
@@ -140,7 +140,7 @@ void generateColorWriteMask(GLBackend::GLState::Commands& commands, uint32 mask)
 }
 
 void generateLineWidth(GLBackend::GLState::Commands& commands, float lineWidth) {
-	commands.push_back(std::make_shared<Command1F>(&GLBackend::do_setStateLineWidth, lineWidth));
+    commands.push_back(std::make_shared<Command1F>(&GLBackend::do_setStateLineWidth, lineWidth));
 }
 
 GLBackend::GLState* GLBackend::syncGPUObject(const State& state) {
@@ -233,11 +233,11 @@ GLBackend::GLState* GLBackend::syncGPUObject(const State& state) {
                     break;
                 }
 
-				case State::LINE_WIDTH: {
-					generateLineWidth(object->_commands, state.getLineWidth());
-					break;
-				}
-			}
+                case State::LINE_WIDTH: {
+                    generateLineWidth(object->_commands, state.getLineWidth());
+                    break;
+                }
+            }
         }
     }
 
@@ -776,11 +776,11 @@ void GLBackend::do_setStateColorWriteMask(uint32 mask) {
 }
 
 void GLBackend::do_setStateLineWidth(float lineWidth) {
-	if (lineWidth != _pipeline._stateCache.lineWidth) {
-		glLineWidth(lineWidth);
-		(void)CHECK_GL_ERROR();
-		_pipeline._stateCache.lineWidth = lineWidth;
-	}
+    if (lineWidth != _pipeline._stateCache.lineWidth) {
+        glLineWidth(lineWidth);
+        (void)CHECK_GL_ERROR();
+        _pipeline._stateCache.lineWidth = lineWidth;
+    }
 }
 
 void GLBackend::do_setStateBlendFactor(Batch& batch, size_t paramOffset) {

@@ -112,12 +112,12 @@ RenderDeferredTask::RenderDeferredTask(CullFunctor cullFunctor) {
     // Lighting Buffer ready for tone mapping
     addJob<ToneMappingDeferred>("ToneMapping");
 
-	// Overlays
+    // Overlays
     addJob<DrawOverlay3D>("DrawOverlay3DOpaque", overlayOpaques, true);
     addJob<DrawOverlay3D>("DrawOverlay3DTransparent", overlayTransparents, false);
 
 
-	// Debugging stages
+    // Debugging stages
     {
         // Debugging Deferred buffer job
         addJob<DebugDeferredBuffer>("DebugDeferredBuffer");
@@ -140,8 +140,8 @@ RenderDeferredTask::RenderDeferredTask(CullFunctor cullFunctor) {
     // FIXME: Hit effect is never used, let's hide it for now, probably a more generic way to add custom post process effects
     // addJob<HitEffect>("HitEffect");
 
-	// test out an outline effect.
-	addJob<HighlightingDeferred>("Highlighting");
+    // test out an outline effect.
+    addJob<HighlightingDeferred>("Highlighting");
 
 
     // Blit!
