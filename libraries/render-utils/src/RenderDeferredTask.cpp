@@ -141,7 +141,7 @@ RenderDeferredTask::RenderDeferredTask(CullFunctor cullFunctor) {
     // addJob<HitEffect>("HitEffect");
 
     // test out an outline effect.
-    addJob<HighlightingDeferred>("Highlighting");
+    addJob<HighlightingEffect>("Highlighting", opaques);
 
 
     // Blit!

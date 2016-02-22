@@ -19,43 +19,32 @@
 #include <gpu/Pipeline.h>
 #include <render/DrawTask.h>
 
-class RenderArgs;
-
 class HighlightingEffect {
 public:
-    HighlightingEffect();
-    virtual ~HighlightingEffect() {}
+	HighlightingEffect();
 
-    void render(RenderArgs* args);
+    using Config = render::Job::Config;
+    using JobModel = render::Job::ModelI<HighlightingEffect, render::ItemBounds, Config>;
+
+    void configure(const Config& config);
+    void run(const render::SceneContextPointer& sceneContext, const render::RenderContextPointer& renderContext, const render::ItemBounds& inItems);
 
 private:
+    render::ShapePlumberPointer _outlineShapePlumber;
 
-	gpu::PipelinePointer _linePassPipeline;
-	gpu::PipelinePointer _drawPipeline;
+    // Class describing the uniform buffer with all the parameters common to the tone mapping shaders
+    class Parameters {
+    public:
+        glm::vec4 _color;
 
-	// Class describing the uniform buffer with all the parameters common to the tone mapping shaders
-	class Parameters {
-	public:
-		glm::vec4 _color;
-
-		Parameters() {}
-	};
-	gpu::BufferView _colorBuffer;
-	gpu::BufferView _colorBufferOutline;
+        Parameters() {}
+    };
+    gpu::BufferView _colorBuffer;
 
 
     void init();
-};
+    void drawHighlightedItems(RenderArgs* args, const render::SceneContextPointer& sceneContext, const render::ItemBounds& inItems);
 
-class HighlightingDeferred {
-public:
-	using Config = render::Job::Config;
-	using JobModel = render::Job::Model<HighlightingDeferred>;
-
-	void configure(const Config& config);
-	void run(const render::SceneContextPointer& sceneContext, const render::RenderContextPointer& renderContext);
-
-	HighlightingEffect _highlightingEffect;
 };
 
 
