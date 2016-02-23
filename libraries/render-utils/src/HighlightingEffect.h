@@ -30,7 +30,8 @@ public:
     void run(const render::SceneContextPointer& sceneContext, const render::RenderContextPointer& renderContext, const render::ItemBounds& inItems);
 
 private:
-    render::ShapePlumberPointer _outlineShapePlumber;
+    render::ShapePlumberPointer _fillStencilShapePlumber;
+    render::ShapePlumberPointer _drawShapePlumber;
 
     // Class describing the uniform buffer with all the parameters common to the tone mapping shaders
     class Parameters {
