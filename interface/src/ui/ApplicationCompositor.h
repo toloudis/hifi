@@ -29,6 +29,7 @@ class RenderArgs;
 class ReticleInterface;
 
 
+const float DEFAULT_RETICLE_DEPTH = 1.0f; // FIXME - probably should be based on UI radius
 
 const float MAGNIFY_WIDTH = 220.0f;
 const float MAGNIFY_HEIGHT = 100.0f;
@@ -46,6 +47,7 @@ class ApplicationCompositor : public QObject {
     Q_OBJECT
 
     Q_PROPERTY(float alpha READ getAlpha WRITE setAlpha)
+    Q_PROPERTY(bool reticleOverDesktop READ getReticleOverDesktop WRITE setReticleOverDesktop)
 public:
     ApplicationCompositor();
     ~ApplicationCompositor();
@@ -83,13 +85,14 @@ public:
     float getAlpha() const { return _alpha; }
     void setAlpha(float alpha) { _alpha = alpha; }
 
-    bool getReticleVisible() { return _reticleVisible; }
+    bool getReticleVisible() const { return _reticleVisible; }
     void setReticleVisible(bool visible) { _reticleVisible = visible; }
 
-    float getReticleDepth() { return _reticleDepth; }
+    float getReticleDepth() const { return _reticleDepth; }
     void setReticleDepth(float depth) { _reticleDepth = depth; }
+    void resetReticleDepth() { _reticleDepth = DEFAULT_RETICLE_DEPTH; }
 
-    glm::vec2 getReticlePosition();
+    glm::vec2 getReticlePosition() const;
     void setReticlePosition(glm::vec2 position, bool sendFakeEvent = true);
 
     glm::vec2 getReticleMaximumPosition() const;
@@ -103,7 +106,15 @@ public:
 
     bool shouldCaptureMouse() const;
 
+    bool getAllowMouseCapture() const { return _allowMouseCapture; }
+    void setAllowMouseCapture(bool capture);
+
+    /// if the reticle is pointing to a system overlay (a dialog box for example) then the function returns true otherwise false
+    bool getReticleOverDesktop() const;
+    void setReticleOverDesktop(bool value) { _isOverDesktop = value; }
+
 private:
+    bool _isOverDesktop { true };
 
     void displayOverlayTextureStereo(RenderArgs* renderArgs, float aspectRatio, float fov);
     void bindCursorTexture(gpu::Batch& batch, uint8_t cursorId = 0);
@@ -123,7 +134,7 @@ private:
     float _textureAspectRatio { 1.0f };
     int _hemiVerticesID { GeometryCache::UNKNOWN_ID };
 
-    float _alpha { 1.0f };
+    float _alpha { 0.0f }; // hidden by default
     float _prevAlpha { 1.0f };
     float _fadeInAlpha { true };
     float _oculusUIRadius { 1.0f };
@@ -147,10 +158,14 @@ private:
     // application specific position, when it's in desktop mode, the reticle position will simply move
     // the system mouse.
     glm::vec2 _reticlePositionInHMD { 0.0f, 0.0f };
-    mutable QMutex _reticlePositionInHMDLock{ QMutex::Recursive };
+    mutable QMutex _reticleLock { QMutex::Recursive };
 
     QPointF _lastKnownRealMouse;
     bool _ignoreMouseMove { false };
+
+    bool _reticleOverQml { false };
+
+    bool _allowMouseCapture { true };
 
     ReticleInterface* _reticleInterface;
 };
@@ -163,11 +178,18 @@ class ReticleInterface : public QObject {
     Q_PROPERTY(float depth READ getDepth WRITE setDepth)
     Q_PROPERTY(glm::vec2 maximumPosition READ getMaximumPosition)
     Q_PROPERTY(bool mouseCaptured READ isMouseCaptured)
+    Q_PROPERTY(bool allowMouseCapture READ getAllowMouseCapture WRITE setAllowMouseCapture)
+    Q_PROPERTY(bool pointingAtSystemOverlay READ isPointingAtSystemOverlay)
 
 public:
     ReticleInterface(ApplicationCompositor* outer) : QObject(outer), _compositor(outer) {}
 
     Q_INVOKABLE bool isMouseCaptured() { return _compositor->shouldCaptureMouse(); }
+
+    Q_INVOKABLE bool getAllowMouseCapture() { return _compositor->getAllowMouseCapture(); }
+    Q_INVOKABLE void setAllowMouseCapture(bool value) { return _compositor->setAllowMouseCapture(value); }
+
+    Q_INVOKABLE bool isPointingAtSystemOverlay() { return !_compositor->getReticleOverDesktop(); }
 
     Q_INVOKABLE bool getVisible() { return _compositor->getReticleVisible(); }
     Q_INVOKABLE void setVisible(bool visible) { _compositor->setReticleVisible(visible); }
@@ -179,6 +201,7 @@ public:
     Q_INVOKABLE void setPosition(glm::vec2 position) { _compositor->setReticlePosition(position); }
 
     Q_INVOKABLE glm::vec2 getMaximumPosition() { return _compositor->getReticleMaximumPosition(); }
+
 private:
     ApplicationCompositor* _compositor;
 };

@@ -120,6 +120,8 @@ public:
     QSize getDeviceSize() const;
     bool hasFocus() const;
 
+    void showCursor(const QCursor& cursor);
+
     bool isThrottleRendering() const;
 
     Camera* getCamera() { return &_myCamera; }
@@ -149,6 +151,7 @@ public:
     const ApplicationOverlay& getApplicationOverlay() const { return _applicationOverlay; }
     ApplicationCompositor& getApplicationCompositor() { return _compositor; }
     const ApplicationCompositor& getApplicationCompositor() const { return _compositor; }
+
     Overlays& getOverlays() { return _overlays; }
 
     bool isForeground() const { return _isForeground; }
@@ -224,7 +227,6 @@ signals:
     void svoImportRequested(const QString& url);
 
     void checkBackgroundDownloads();
-    void domainConnectionRefused(const QString& reason);
 
     void fullAvatarURLChanged(const QString& newValue, const QString& modelName);
 
@@ -270,6 +272,8 @@ public slots:
 
     void cycleCamera();
     void cameraMenuChanged();
+    void toggleOverlays();
+    void setOverlaysVisible(bool visible);
 
     void reloadResourceCaches();
 
@@ -280,19 +284,17 @@ public slots:
     void runTests();
 
 private slots:
+    void showDesktop();
     void clearDomainOctreeDetails();
     void idle(uint64_t now);
     void aboutToQuit();
 
-    void connectedToDomain(const QString& hostname);
+    void resettingDomain();
 
     void audioMuteToggled();
     void faceTrackerMuteToggled();
 
     void activeChanged(Qt::ApplicationState state);
-
-    void domainSettingsReceived(const QJsonObject& domainSettingsObject);
-    void handleDomainConnectionDeniedPacket(QSharedPointer<ReceivedMessage> message);
 
     void notifyPacketVersionMismatch();
 
@@ -324,8 +326,6 @@ private:
 
     void cleanupBeforeQuit();
 
-    void emptyLocalCache();
-
     void update(float deltaTime);
 
     void setPalmData(Hand* hand, const controller::Pose& pose, float deltaTime, HandData::Hand whichHand, float triggerValue);
@@ -351,7 +351,6 @@ private:
     void checkSkeleton();
 
     void initializeAcceptedFiles();
-    int getRenderAmbientLight() const;
 
     void displaySide(RenderArgs* renderArgs, Camera& whichCamera, bool selfAvatarOnly = false);
 
@@ -473,7 +472,6 @@ private:
     typedef bool (Application::* AcceptURLMethod)(const QString &);
     static const QHash<QString, AcceptURLMethod> _acceptedExtensions;
 
-    QList<QString> _domainConnectionRefusals;
     glm::uvec2 _renderResolution;
 
     int _maxOctreePPS = DEFAULT_MAX_OCTREE_PPS;
@@ -509,10 +507,14 @@ private:
     int _avatarAttachmentRequest = 0;
 
     bool _settingsLoaded { false };
-    bool _pendingPaint { false };
     QTimer* _idleTimer { nullptr };
 
     bool _fakedMouseEvent { false };
+
+    void checkChangeCursor();
+    mutable QMutex _changeCursorLock { QMutex::Recursive };
+    QCursor _desiredCursor{ Qt::BlankCursor };
+    bool _cursorNeedsChanging { false };
 };
 
 #endif // hifi_Application_h

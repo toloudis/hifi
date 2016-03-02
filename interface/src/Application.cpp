@@ -210,8 +210,6 @@ static const QString INFO_EDIT_ENTITIES_PATH = "html/edit-commands.html";
 
 static const unsigned int THROTTLED_SIM_FRAMERATE = 15;
 static const int THROTTLED_SIM_FRAME_PERIOD_MS = MSECS_PER_SECOND / THROTTLED_SIM_FRAMERATE;
-static const unsigned int CAPPED_SIM_FRAMERATE = 120;
-static const int CAPPED_SIM_FRAME_PERIOD_MS = MSECS_PER_SECOND / CAPPED_SIM_FRAMERATE;
 
 static const uint32_t INVALID_FRAME = UINT32_MAX;
 
@@ -372,7 +370,6 @@ bool setupEssentials(int& argc, char** argv) {
     DependencyManager::set<AutoUpdater>();
     DependencyManager::set<PathUtils>();
     DependencyManager::set<InterfaceActionFactory>();
-    DependencyManager::set<AssetClient>();
     DependencyManager::set<AudioInjectorManager>();
     DependencyManager::set<MessagesClient>();
     DependencyManager::set<UserInputMapper>();
@@ -425,11 +422,11 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     _maxOctreePPS(maxOctreePacketsPerSecond.get()),
     _lastFaceTrackerUpdate(0)
 {
-    // FIXME this may be excessivly conservative.  On the other hand 
+    // FIXME this may be excessivly conservative.  On the other hand
     // maybe I'm used to having an 8-core machine
-    // Perhaps find the ideal thread count  and subtract 2 or 3 
+    // Perhaps find the ideal thread count  and subtract 2 or 3
     // (main thread, present thread, random OS load)
-    // More threads == faster concurrent loads, but also more concurrent 
+    // More threads == faster concurrent loads, but also more concurrent
     // load on the GPU until we can serialize GPU transfers (off the main thread)
     QThreadPool::globalInstance()->setMaxThreadCount(2);
     thread()->setPriority(QThread::HighPriority);
@@ -530,13 +527,7 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
 
     audioThread->start();
 
-    // Setup AssetClient
-    auto assetClient = DependencyManager::get<AssetClient>();
-    QThread* assetThread = new QThread;
-    assetThread->setObjectName("Asset Thread");
-    assetClient->moveToThread(assetThread);
-    connect(assetThread, &QThread::started, assetClient.data(), &AssetClient::init);
-    assetThread->start();
+    ResourceManager::init();
 
     // Setup MessagesClient
     auto messagesClient = DependencyManager::get<MessagesClient>();
@@ -549,18 +540,17 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     const DomainHandler& domainHandler = nodeList->getDomainHandler();
 
     connect(&domainHandler, SIGNAL(hostnameChanged(const QString&)), SLOT(domainChanged(const QString&)));
-    connect(&domainHandler, SIGNAL(connectedToDomain(const QString&)), SLOT(connectedToDomain(const QString&)));
+    connect(&domainHandler, SIGNAL(resetting()), SLOT(resettingDomain()));
     connect(&domainHandler, SIGNAL(connectedToDomain(const QString&)), SLOT(updateWindowTitle()));
     connect(&domainHandler, SIGNAL(disconnectedFromDomain()), SLOT(updateWindowTitle()));
     connect(&domainHandler, SIGNAL(disconnectedFromDomain()), SLOT(clearDomainOctreeDetails()));
-    connect(&domainHandler, &DomainHandler::settingsReceived, this, &Application::domainSettingsReceived);
 
     // update our location every 5 seconds in the metaverse server, assuming that we are authenticated with one
     const qint64 DATA_SERVER_LOCATION_CHANGE_UPDATE_MSECS = 5 * 1000;
 
     auto discoverabilityManager = DependencyManager::get<DiscoverabilityManager>();
     connect(&locationUpdateTimer, &QTimer::timeout, discoverabilityManager.data(), &DiscoverabilityManager::updateLocation);
-    connect(&locationUpdateTimer, &QTimer::timeout, 
+    connect(&locationUpdateTimer, &QTimer::timeout,
         DependencyManager::get<AddressManager>().data(), &AddressManager::storeCurrentAddress);
     locationUpdateTimer.start(DATA_SERVER_LOCATION_CHANGE_UPDATE_MSECS);
 
@@ -590,6 +580,7 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     connect(&accountManager, &AccountManager::usernameChanged, this, &Application::updateWindowTitle);
 
     // set the account manager's root URL and trigger a login request if we don't have the access token
+    accountManager.setIsAgent(true);
     accountManager.setAuthURL(NetworkingConstants::METAVERSE_SERVER_URL);
     UserActivityLogger::getInstance().launch(applicationVersion());
 
@@ -604,7 +595,7 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
 
     connect(addressManager.data(), &AddressManager::hostChanged, this, &Application::updateWindowTitle);
     connect(this, &QCoreApplication::aboutToQuit, addressManager.data(), &AddressManager::storeCurrentAddress);
-    
+
     // Save avatar location immediately after a teleport.
     connect(getMyAvatar(), &MyAvatar::positionGoneTo,
         DependencyManager::get<AddressManager>().data(), &AddressManager::storeCurrentAddress);
@@ -625,7 +616,7 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
         getEntities()->reloadEntityScripts();
     }, Qt::QueuedConnection);
 
-    connect(scriptEngines, &ScriptEngines::scriptLoadError, 
+    connect(scriptEngines, &ScriptEngines::scriptLoadError,
         scriptEngines, [](const QString& filename, const QString& error){
         OffscreenUi::warning(nullptr, "Error Loading Script", filename + " failed to load.");
     }, Qt::QueuedConnection);
@@ -646,13 +637,6 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     connect(&identityPacketTimer, &QTimer::timeout, getMyAvatar(), &MyAvatar::sendIdentityPacket);
     identityPacketTimer.start(AVATAR_IDENTITY_PACKET_SEND_INTERVAL_MSECS);
 
-    QString cachePath = QStandardPaths::writableLocation(QStandardPaths::DataLocation);
-    QNetworkAccessManager& networkAccessManager = NetworkAccessManager::getInstance();
-    QNetworkDiskCache* cache = new QNetworkDiskCache();
-    cache->setMaximumCacheSize(MAXIMUM_CACHE_SIZE);
-    cache->setCacheDirectory(!cachePath.isEmpty() ? cachePath : "interfaceCache");
-    networkAccessManager.setCache(cache);
-
     ResourceCache::setRequestLimit(3);
 
     _glWidget = new GLCanvas();
@@ -663,15 +647,15 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
 
     _glWidget->setFocusPolicy(Qt::StrongFocus);
     _glWidget->setFocus();
+
 #ifdef Q_OS_MAC
-    // OSX doesn't seem to provide for hiding the cursor only on the GL widget
-    _window->setCursor(Qt::BlankCursor);
+    auto cursorTarget = _window; // OSX doesn't seem to provide for hiding the cursor only on the GL widget
 #else
-    // On windows and linux, hiding the top level cursor also means it's invisible
-    // when hovering over the window menu, which is a pain, so only hide it for
-    // the GL surface
-    _glWidget->setCursor(Qt::BlankCursor);
+    // On windows and linux, hiding the top level cursor also means it's invisible when hovering over the 
+    // window menu, which is a pain, so only hide it for the GL surface
+    auto cursorTarget = _glWidget;
 #endif
+    cursorTarget->setCursor(Qt::BlankCursor);
 
     // enable mouse tracking; otherwise, we only get drag events
     _glWidget->setMouseTracking(true);
@@ -817,6 +801,8 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
             } else if (action == controller::toInt(controller::Action::RETICLE_Y)) {
                 auto oldPos = _compositor.getReticlePosition();
                 _compositor.setReticlePosition({ oldPos.x, oldPos.y + state });
+            } else if (action == controller::toInt(controller::Action::TOGGLE_OVERLAY)) {
+                toggleOverlays();
             }
         }
     });
@@ -903,9 +889,6 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     SpacemouseManager::getInstance().init();
 #endif
 
-    auto& packetReceiver = nodeList->getPacketReceiver();
-    packetReceiver.registerListener(PacketType::DomainConnectionDenied, this, "handleDomainConnectionDeniedPacket");
-
     // If the user clicks an an entity, we will check that it's an unlocked web entity, and if so, set the focus to it
     auto entityScriptingInterface = DependencyManager::get<EntityScriptingInterface>();
     connect(entityScriptingInterface.data(), &EntityScriptingInterface::clickDownOnEntity,
@@ -967,6 +950,7 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
 
     connect(this, &Application::applicationStateChanged, this, &Application::activeChanged);
     qCDebug(interfaceapp, "Startup time: %4.2f seconds.", (double)startupTimer.elapsed() / 1000.0);
+
     _idleTimer = new QTimer(this);
     connect(_idleTimer, &QTimer::timeout, [=] {
         idle(usecTimestampNow());
@@ -975,9 +959,32 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
         disconnect(_idleTimer);
     });
     // Setting the interval to zero forces this to get called whenever there are no messages
-    // in the queue, which can be pretty damn frequent.  Hence the idle function has a bunch 
+    // in the queue, which can be pretty damn frequent.  Hence the idle function has a bunch
     // of logic to abort early if it's being called too often.
     _idleTimer->start(0);
+}
+
+
+void Application::checkChangeCursor() {
+    QMutexLocker locker(&_changeCursorLock);
+    if (_cursorNeedsChanging) {
+#ifdef Q_OS_MAC
+        auto cursorTarget = _window; // OSX doesn't seem to provide for hiding the cursor only on the GL widget
+#else
+        // On windows and linux, hiding the top level cursor also means it's invisible when hovering over the 
+        // window menu, which is a pain, so only hide it for the GL surface
+        auto cursorTarget = _glWidget;
+#endif
+        cursorTarget->setCursor(_desiredCursor);
+
+        _cursorNeedsChanging = false;
+    }
+}
+
+void Application::showCursor(const QCursor& cursor) {
+    QMutexLocker locker(&_changeCursorLock);
+    _desiredCursor = cursor;
+    _cursorNeedsChanging = true;
 }
 
 void Application::aboutToQuit() {
@@ -1023,7 +1030,7 @@ void Application::cleanupBeforeQuit() {
     getEntities()->shutdown(); // tell the entities system we're shutting down, so it will stop running scripts
     DependencyManager::get<ScriptEngines>()->saveScripts();
     DependencyManager::get<ScriptEngines>()->shutdownScripting(); // stop all currently running global scripts
-    DependencyManager::destroy<ScriptEngines>(); 
+    DependencyManager::destroy<ScriptEngines>();
 
     // first stop all timers directly or by invokeMethod
     // depending on what thread they run in
@@ -1059,13 +1066,6 @@ void Application::cleanupBeforeQuit() {
 #endif
 
     DependencyManager::destroy<OffscreenUi>();
-}
-
-void Application::emptyLocalCache() {
-    if (auto cache = NetworkAccessManager::getInstance().cache()) {
-        qDebug() << "DiskCacheEditor::clear(): Clearing disk cache.";
-        cache->clear();
-    }
 }
 
 Application::~Application() {
@@ -1105,11 +1105,7 @@ Application::~Application() {
     DependencyManager::destroy<ScriptCache>();
     DependencyManager::destroy<SoundCache>();
 
-    // cleanup the AssetClient thread
-    QThread* assetThread = DependencyManager::get<AssetClient>()->thread();
-    DependencyManager::destroy<AssetClient>();
-    assetThread->quit();
-    assetThread->wait();
+    ResourceManager::cleanup();
 
     QThread* nodeThread = DependencyManager::get<NodeList>()->thread();
 
@@ -1198,7 +1194,7 @@ void Application::initializeUi() {
     // OffscreenUi is a subclass of OffscreenQmlSurface specifically designed to
     // support the window management and scripting proxies for VR use
     offscreenUi->createDesktop(QString("hifi/Desktop.qml"));
-    
+
     // FIXME either expose so that dialogs can set this themselves or
     // do better detection in the offscreen UI of what has focus
     offscreenUi->setNavigationFocused(false);
@@ -1211,10 +1207,10 @@ void Application::initializeUi() {
 
     setupPreferences();
 
-    // For some reason there is already an "Application" object in the QML context, 
+    // For some reason there is already an "Application" object in the QML context,
     // though I can't find it. Hence, "ApplicationInterface"
     rootContext->setContextProperty("SnapshotUploader", new SnapshotUploader());
-    rootContext->setContextProperty("ApplicationInterface", this); 
+    rootContext->setContextProperty("ApplicationInterface", this);
     rootContext->setContextProperty("AnimationCache", DependencyManager::get<AnimationCache>().data());
     rootContext->setContextProperty("Audio", &AudioScriptingInterface::getInstance());
     rootContext->setContextProperty("Controller", DependencyManager::get<controller::ScriptingInterface>().data());
@@ -1259,6 +1255,8 @@ void Application::initializeUi() {
     rootContext->setContextProperty("Render", _renderEngine->getConfiguration().get());
     rootContext->setContextProperty("Reticle", _compositor.getReticleInterface());
 
+    rootContext->setContextProperty("ApplicationCompositor", &_compositor);
+
     _glWidget->installEventFilter(offscreenUi.data());
     offscreenUi->setMouseTranslator([=](const QPointF& pt) {
         QPointF result = pt;
@@ -1293,6 +1291,7 @@ void Application::initializeUi() {
 }
 
 void Application::paintGL() {
+
     // paintGL uses a queued connection, so we can get messages from the queue even after we've quit
     // and the plugins have shutdown
     if (_aboutToQuit) {
@@ -1316,10 +1315,6 @@ void Application::paintGL() {
     if (now - _lastFramesPerSecondUpdate > USECS_PER_SECOND) {
         _fps = _framesPerSecond.getAverage();
         _lastFramesPerSecondUpdate = now;
-    }
-
-    if (_isGLInitialized) {
-        idle(now);
     }
 
     PROFILE_RANGE(__FUNCTION__);
@@ -1616,7 +1611,6 @@ void Application::paintGL() {
     }
 
     _lastInstantaneousFps = instantaneousFps;
-    _pendingPaint = false;
 }
 
 void Application::runTests() {
@@ -2027,9 +2021,7 @@ void Application::keyPressEvent(QKeyEvent* event) {
                  Menu::getInstance()->setIsOptionChecked(MenuOption::ThirdPerson, !Menu::getInstance()->isOptionChecked(MenuOption::FirstPerson));
                  cameraMenuChanged();
                  break;
-            case Qt::Key_O:
-                _overlayConductor.setEnabled(!_overlayConductor.getEnabled());
-                break;
+
             case Qt::Key_Slash:
                 Menu::getInstance()->triggerOption(MenuOption::Stats);
                 break;
@@ -2429,10 +2421,27 @@ bool Application::acceptSnapshot(const QString& urlString) {
 static uint32_t _renderedFrameIndex { INVALID_FRAME };
 
 void Application::idle(uint64_t now) {
+
     if (_aboutToQuit) {
         return; // bail early, nothing to do here.
     }
-    
+
+
+    checkChangeCursor();
+
+    Stats::getInstance()->updateStats();
+    AvatarInputs::getInstance()->update();
+
+    // These tasks need to be done on our first idle, because we don't want the showing of
+    // overlay subwindows to do a showDesktop() until after the first time through
+    static bool firstIdle = true;
+    if (firstIdle) {
+        firstIdle = false;
+        auto offscreenUi = DependencyManager::get<OffscreenUi>();
+        connect(offscreenUi.data(), &OffscreenUi::showDesktop, this, &Application::showDesktop);
+        _overlayConductor.setEnabled(Menu::getInstance()->isOptionChecked(MenuOption::Overlays));
+    }
+
     auto displayPlugin = getActiveDisplayPlugin();
     // depending on whether we're throttling or not.
     // Once rendering is off on another thread we should be able to have Application::idle run at start(0) in
@@ -2453,30 +2462,16 @@ void Application::idle(uint64_t now) {
         _renderedFrameIndex = INVALID_FRAME;
     }
 
-    // Nested ifs are for clarity in the logic.  Don't collapse them into a giant single if.
-    // Don't saturate the main thread with rendering, no paint calls until the last one is complete
-    if (!_pendingPaint) {
-        // Also no paint calls until the display plugin has increased by at least one frame 
-        // (don't render at 90fps if the display plugin only goes at 60)
-        if (_renderedFrameIndex == INVALID_FRAME || presentCount > _renderedFrameIndex) {
-            // Record what present frame we're on
-            _renderedFrameIndex = presentCount;
-            // Don't allow paint requests to stack up in the event queue
-            _pendingPaint = true;
-            // But when we DO request a paint, get to it as soon as possible: high priority
-            postEvent(this, new QEvent(static_cast<QEvent::Type>(Paint)), Qt::HighEventPriority);
-        }
-    }  
-    
-    // For the rest of idle, we want to cap at the max sim rate, so we might not call 
-    // the remaining idle work every paint frame, or vice versa
-    // In theory this means we could call idle processing more often than painting,
-    // but in practice, when the paintGL calls aren't keeping up, there's no room left
-    // in the main thread to call idle more often than paint.
-    // This check is mostly to keep idle from burning up CPU cycles by running at 
-    // hundreds of idles per second when the rendering is that fast
-    if ((timeSinceLastUpdateUs / USECS_PER_MSEC) < CAPPED_SIM_FRAME_PERIOD_MS) {
-        // No paint this round, but might be time for a new idle, otherwise return
+    // Don't saturate the main thread with rendering and simulation,
+    // unless display plugin has increased by at least one frame
+    if (_renderedFrameIndex == INVALID_FRAME || presentCount > _renderedFrameIndex) {
+        // Record what present frame we're on
+        _renderedFrameIndex = presentCount;
+
+        // request a paint, get to it as soon as possible: high priority
+        postEvent(this, new QEvent(static_cast<QEvent::Type>(Paint)), Qt::HighEventPriority);
+    } else {
+        // there's no use in simulating or rendering faster then the present rate.
         return;
     }
 
@@ -2990,6 +2985,16 @@ void Application::updateThreads(float deltaTime) {
     }
 }
 
+void Application::toggleOverlays() {
+    auto newOverlaysVisible = !_overlayConductor.getEnabled();
+    Menu::getInstance()->setIsOptionChecked(MenuOption::Overlays, newOverlaysVisible);
+    _overlayConductor.setEnabled(newOverlaysVisible);
+}
+
+void Application::setOverlaysVisible(bool visible) {
+    _overlayConductor.setEnabled(visible);
+}
+
 void Application::cycleCamera() {
     auto menu = Menu::getInstance();
     if (menu->isOptionChecked(MenuOption::FullscreenMirror)) {
@@ -3048,7 +3053,7 @@ void Application::reloadResourceCaches() {
     _viewFrustum.setOrientation(glm::quat());
     queryOctree(NodeType::EntityServer, PacketType::EntityQuery, _entityServerJurisdictions);
 
-    emptyLocalCache();
+    DependencyManager::get<AssetClient>()->clearCache();
 
     DependencyManager::get<AnimationCache>()->refreshAll();
     DependencyManager::get<ModelCache>()->refreshAll();
@@ -3384,7 +3389,7 @@ void Application::queryOctree(NodeType_t serverType, PacketType packetType, Node
     _octreeQuery.setCameraNearClip(_viewFrustum.getNearClip());
     _octreeQuery.setCameraFarClip(_viewFrustum.getFarClip());
     _octreeQuery.setCameraEyeOffsetPosition(glm::vec3());
-    _octreeQuery.setKeyholeRadius(_viewFrustum.getKeyholeRadius());
+    _octreeQuery.setCameraCenterRadius(_viewFrustum.getCenterRadius());
     auto lodManager = DependencyManager::get<LODManager>();
     _octreeQuery.setOctreeSizeScale(lodManager->getOctreeSizeScale());
     _octreeQuery.setBoundaryLevelAdjust(lodManager->getBoundaryLevelAdjust());
@@ -3420,9 +3425,7 @@ void Application::queryOctree(NodeType_t serverType, PacketType packetType, Node
                                                   rootDetails.y * TREE_SCALE,
                                                   rootDetails.z * TREE_SCALE) - glm::vec3(HALF_TREE_SCALE),
                                         rootDetails.s * TREE_SCALE);
-                    ViewFrustum::location serverFrustumLocation = _viewFrustum.cubeInFrustum(serverBounds);
-
-                    if (serverFrustumLocation != ViewFrustum::OUTSIDE) {
+                    if (_viewFrustum.cubeIntersectsKeyhole(serverBounds)) {
                         inViewServers++;
                     }
                 }
@@ -3488,12 +3491,7 @@ void Application::queryOctree(NodeType_t serverType, PacketType packetType, Node
                                         rootDetails.s * TREE_SCALE);
 
 
-                    ViewFrustum::location serverFrustumLocation = _viewFrustum.cubeInFrustum(serverBounds);
-                    if (serverFrustumLocation != ViewFrustum::OUTSIDE) {
-                        inView = true;
-                    } else {
-                        inView = false;
-                    }
+                    inView = _viewFrustum.cubeIntersectsKeyhole(serverBounds);
                 } else {
                     if (wantExtraDebugging) {
                         qCDebug(interfaceapp) << "Jurisdiction without RootCode for node " << *node << ". That's unusual!";
@@ -3772,8 +3770,9 @@ void Application::displaySide(RenderArgs* renderArgs, Camera& theCamera, bool se
     // The pending changes collecting the changes here
     render::PendingChanges pendingChanges;
 
+    // FIXME: Move this out of here!, Background / skybox should be driven by the enityt content just like the other entities
     // Background rendering decision
-    if (BackgroundRenderData::_item == 0) {
+    if (!render::Item::isValidID(BackgroundRenderData::_item)) {
         auto backgroundRenderData = make_shared<BackgroundRenderData>();
         auto backgroundRenderPayload = make_shared<BackgroundRenderData::Payload>(backgroundRenderData);
         BackgroundRenderData::_item = _main3DScene->allocateID();
@@ -3798,8 +3797,9 @@ void Application::displaySide(RenderArgs* renderArgs, Camera& theCamera, bool se
         }
     }
 
+    // FIXME: Move this out of here!, WorldBox should be driven by the entity content just like the other entities
     // Make sure the WorldBox is in the scene
-    if (WorldBoxRenderData::_item == 0) {
+    if (!render::Item::isValidID(WorldBoxRenderData::_item)) {
         auto worldBoxRenderData = make_shared<WorldBoxRenderData>();
         auto worldBoxRenderPayload = make_shared<WorldBoxRenderData::Payload>(worldBoxRenderData);
 
@@ -3813,18 +3813,10 @@ void Application::displaySide(RenderArgs* renderArgs, Camera& theCamera, bool se
         });
     }
 
-    // Setup the current Zone Entity lighting and skybox
-    // Fixme: We need a better soution through an actual render item !!!
+    // Setup the current Zone Entity lighting
     {
-        DependencyManager::get<DeferredLightingEffect>()->setAmbientLightMode(getRenderAmbientLight());
-        auto skyStage = DependencyManager::get<SceneScriptingInterface>()->getSkyStage();
-        DependencyManager::get<DeferredLightingEffect>()->setGlobalLight(skyStage->getSunLight()->getDirection(), skyStage->getSunLight()->getColor(), skyStage->getSunLight()->getIntensity(), skyStage->getSunLight()->getAmbientIntensity());
-
-        auto skybox = model::SkyboxPointer();
-        if (skyStage->getBackgroundMode() == model::SunSkyStage::SKY_BOX) {
-            skybox = skyStage->getSkybox();
-        }
-        DependencyManager::get<DeferredLightingEffect>()->setGlobalSkybox(skybox);
+        auto stage = DependencyManager::get<SceneScriptingInterface>()->getSkyStage();
+        DependencyManager::get<DeferredLightingEffect>()->setGlobalLight(stage->getSunLight());
     }
 
     {
@@ -3960,37 +3952,13 @@ void Application::clearDomainOctreeDetails() {
 void Application::domainChanged(const QString& domainHostname) {
     updateWindowTitle();
     clearDomainOctreeDetails();
-    _domainConnectionRefusals.clear();
     // disable physics until we have enough information about our new location to not cause craziness.
     _physicsEnabled = false;
 }
 
-void Application::handleDomainConnectionDeniedPacket(QSharedPointer<ReceivedMessage> message) {
-    // Read deny reason from packet
-    quint16 reasonSize;
-    message->readPrimitive(&reasonSize);
-    QString reason = QString::fromUtf8(message->readWithoutCopy(reasonSize));
 
-    // output to the log so the user knows they got a denied connection request
-    // and check and signal for an access token so that we can make sure they are logged in
-    qCDebug(interfaceapp) << "The domain-server denied a connection request: " << reason;
-    qCDebug(interfaceapp) << "You may need to re-log to generate a keypair so you can provide a username signature.";
-
-    if (!_domainConnectionRefusals.contains(reason)) {
-        _domainConnectionRefusals.append(reason);
-        emit domainConnectionRefused(reason);
-    }
-
-    AccountManager::getInstance().checkAndSignalForAccessToken();
-}
-
-void Application::connectedToDomain(const QString& hostname) {
-    AccountManager& accountManager = AccountManager::getInstance();
-    const QUuid& domainID = DependencyManager::get<NodeList>()->getDomainHandler().getUUID();
-
-    if (accountManager.isLoggedIn() && !domainID.isNull()) {
-        _notifiedPacketVersionMismatchThisDomain = false;
-    }
+void Application::resettingDomain() {
+    _notifiedPacketVersionMismatchThisDomain = false;
 }
 
 void Application::nodeAdded(SharedNodePointer node) {
@@ -4307,7 +4275,7 @@ bool Application::askToSetAvatarUrl(const QString& url) {
         case FSTReader::HEAD_AND_BODY_MODEL:
              ok = QMessageBox::Ok == OffscreenUi::question("Set Avatar",
 							   "Would you like to use '" + modelName + "' for your avatar?",
-							   QMessageBox::Ok | QMessageBox::Cancel);
+							   QMessageBox::Ok | QMessageBox::Cancel, QMessageBox::Ok);
         break;
 
         default:
@@ -4527,33 +4495,6 @@ void Application::openUrl(const QUrl& url) {
     }
 }
 
-void Application::domainSettingsReceived(const QJsonObject& domainSettingsObject) {
-    // from the domain-handler, figure out the satoshi cost per voxel and per meter cubed
-    const QString VOXEL_SETTINGS_KEY = "voxels";
-    const QString PER_VOXEL_COST_KEY = "per-voxel-credits";
-    const QString PER_METER_CUBED_COST_KEY = "per-meter-cubed-credits";
-    const QString VOXEL_WALLET_UUID = "voxel-wallet";
-
-    const QJsonObject& voxelObject = domainSettingsObject[VOXEL_SETTINGS_KEY].toObject();
-
-    qint64 satoshisPerVoxel = 0;
-    qint64 satoshisPerMeterCubed = 0;
-    QUuid voxelWalletUUID;
-
-    if (!domainSettingsObject.isEmpty()) {
-        float perVoxelCredits = (float) voxelObject[PER_VOXEL_COST_KEY].toDouble();
-        float perMeterCubedCredits = (float) voxelObject[PER_METER_CUBED_COST_KEY].toDouble();
-
-        satoshisPerVoxel = (qint64) floorf(perVoxelCredits * SATOSHIS_PER_CREDIT);
-        satoshisPerMeterCubed = (qint64) floorf(perMeterCubedCredits * SATOSHIS_PER_CREDIT);
-
-        voxelWalletUUID = QUuid(voxelObject[VOXEL_WALLET_UUID].toString());
-    }
-
-    qCDebug(interfaceapp) << "Octree edits costs are" << satoshisPerVoxel << "per octree cell and" << satoshisPerMeterCubed << "per meter cubed";
-    qCDebug(interfaceapp) << "Destination wallet UUID for edit payments is" << voxelWalletUUID;
-}
-
 void Application::loadDialog() {
     auto scriptEngines = DependencyManager::get<ScriptEngines>();
     QString fileNameString = OffscreenUi::getOpenFileName(
@@ -4624,34 +4565,6 @@ float Application::getRenderResolutionScale() const {
         return 0.25f;
     } else {
         return 1.0f;
-    }
-}
-
-int Application::getRenderAmbientLight() const {
-    if (Menu::getInstance()->isOptionChecked(MenuOption::RenderAmbientLightGlobal)) {
-        return -1;
-    } else if (Menu::getInstance()->isOptionChecked(MenuOption::RenderAmbientLight0)) {
-        return 0;
-    } else if (Menu::getInstance()->isOptionChecked(MenuOption::RenderAmbientLight1)) {
-        return 1;
-    } else if (Menu::getInstance()->isOptionChecked(MenuOption::RenderAmbientLight2)) {
-        return 2;
-    } else if (Menu::getInstance()->isOptionChecked(MenuOption::RenderAmbientLight3)) {
-        return 3;
-    } else if (Menu::getInstance()->isOptionChecked(MenuOption::RenderAmbientLight4)) {
-        return 4;
-    } else if (Menu::getInstance()->isOptionChecked(MenuOption::RenderAmbientLight5)) {
-        return 5;
-    } else if (Menu::getInstance()->isOptionChecked(MenuOption::RenderAmbientLight6)) {
-        return 6;
-    } else if (Menu::getInstance()->isOptionChecked(MenuOption::RenderAmbientLight7)) {
-        return 7;
-    } else if (Menu::getInstance()->isOptionChecked(MenuOption::RenderAmbientLight8)) {
-        return 8;
-    } else if (Menu::getInstance()->isOptionChecked(MenuOption::RenderAmbientLight9)) {
-        return 9;
-    } else {
-        return -1;
     }
 }
 
@@ -4783,7 +4696,7 @@ static void addDisplayPluginToMenu(DisplayPluginPointer displayPlugin, bool acti
             groupingMenu = "Developer";
             break;
         default:
-            groupingMenu = "Standard"; 
+            groupingMenu = "Standard";
             break;
     }
 
@@ -5036,27 +4949,11 @@ void Application::setPalmData(Hand* hand, const controller::Pose& pose, float de
         // controller pose is in Avatar frame.
         glm::vec3 position = pose.getTranslation();
         glm::quat rotation = pose.getRotation();
+        glm::vec3 rawVelocity = pose.getVelocity();
+        glm::vec3 angularVelocity = pose.getAngularVelocity();
 
-        //  Compute current velocity from position change
-        glm::vec3 rawVelocity;
-        if (deltaTime > 0.0f) {
-            rawVelocity = (position - palm.getRawPosition()) / deltaTime;
-        } else {
-            rawVelocity = glm::vec3(0.0f);
-        }
-        palm.setRawVelocity(rawVelocity);   //  meters/sec
-
-        //  Angular Velocity of Palm
-        glm::quat deltaRotation = rotation * glm::inverse(palm.getRawRotation());
-        glm::vec3 angularVelocity(0.0f);
-        float rotationAngle = glm::angle(deltaRotation);
-        if ((rotationAngle > EPSILON) && (deltaTime > 0.0f)) {
-            angularVelocity = glm::normalize(glm::axis(deltaRotation));
-            angularVelocity *= (rotationAngle / deltaTime);
-            palm.setRawAngularVelocity(angularVelocity);
-        } else {
-            palm.setRawAngularVelocity(glm::vec3(0.0f));
-        }
+        palm.setRawVelocity(rawVelocity);
+        palm.setRawAngularVelocity(angularVelocity);
 
         if (controller::InputDevice::getLowVelocityFilter()) {
             //  Use a velocity sensitive filter to damp small motions and preserve large ones with
@@ -5126,5 +5023,11 @@ void Application::readArgumentsFromLocalSocket() {
     // If we received a message, try to open it as a URL
     if (message.length() > 0) {
         qApp->openUrl(QString::fromUtf8(message));
+    }
+}
+
+void Application::showDesktop() {
+    if (!_overlayConductor.getEnabled()) {
+        _overlayConductor.setEnabled(true);
     }
 }
