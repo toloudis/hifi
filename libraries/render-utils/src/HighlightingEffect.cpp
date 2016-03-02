@@ -52,6 +52,260 @@ void HighlightingEffect::init() {
         
         )SCRIBE";
 
+    const char model_outline_vert[] = R"SCRIBE(#version 410 core
+//  Generated on Thu Feb 18 19:48:48 2016
+//
+//  model_shadow.vert
+//  vertex shader
+//
+//  Created by Andrzej Kapolka on 3/24/14.
+//  Copyright 2014 High Fidelity, Inc.
+//
+//  Distributed under the Apache License, Version 2.0.
+//  See the accompanying file LICENSE or http://www.apache.org/licenses/LICENSE-2.0.html
+//
+
+layout(location = 0) in vec4 inPosition;
+layout(location = 1) in vec4 inNormal;
+layout(location = 2) in vec4 inColor;
+layout(location = 3) in vec4 inTexCoord0;
+layout(location = 4) in vec4 inTangent;
+layout(location = 5) in vec4 inSkinClusterIndex;
+layout(location = 6) in vec4 inSkinClusterWeight;
+layout(location = 7) in vec4 inTexCoord1;
+struct TransformObject {
+    mat4 _model;
+    mat4 _modelInverse;
+};
+
+layout(location=15) in ivec2 _drawCallInfo;
+
+uniform samplerBuffer transformObjectBuffer;
+
+TransformObject getTransformObject() {
+    int offset = 8 * _drawCallInfo.x;
+    TransformObject object;
+    object._model[0] = texelFetch(transformObjectBuffer, offset);
+    object._model[1] = texelFetch(transformObjectBuffer, offset + 1);
+    object._model[2] = texelFetch(transformObjectBuffer, offset + 2);
+    object._model[3] = texelFetch(transformObjectBuffer, offset + 3);
+
+    object._modelInverse[0] = texelFetch(transformObjectBuffer, offset + 4);
+    object._modelInverse[1] = texelFetch(transformObjectBuffer, offset + 5);
+    object._modelInverse[2] = texelFetch(transformObjectBuffer, offset + 6);
+    object._modelInverse[3] = texelFetch(transformObjectBuffer, offset + 7);
+
+    return object;
+}
+
+struct TransformCamera {
+    mat4 _view;
+    mat4 _viewInverse;
+    mat4 _projectionViewUntranslated;
+    mat4 _projection;
+    mat4 _projectionInverse;
+    vec4 _viewport;
+};
+
+layout(std140) uniform transformCameraBuffer {
+    TransformCamera _camera;
+};
+TransformCamera getTransformCamera() {
+    return _camera;
+}
+
+
+
+void main(void) {
+    // standard transform
+    TransformCamera cam = getTransformCamera();
+    TransformObject obj = getTransformObject();
+
+    vec3 normal = vec3(0.0, 0.0, 0.0);
+    { // transformModelToEyeDir
+        vec3 mr0 = vec3(obj._modelInverse[0].x, obj._modelInverse[1].x, obj._modelInverse[2].x);
+        vec3 mr1 = vec3(obj._modelInverse[0].y, obj._modelInverse[1].y, obj._modelInverse[2].y);
+        vec3 mr2 = vec3(obj._modelInverse[0].z, obj._modelInverse[1].z, obj._modelInverse[2].z);
+
+        vec3 mvc0 = vec3(dot(cam._viewInverse[0].xyz, mr0), dot(cam._viewInverse[0].xyz, mr1), dot(cam._viewInverse[0].xyz, mr2));
+        vec3 mvc1 = vec3(dot(cam._viewInverse[1].xyz, mr0), dot(cam._viewInverse[1].xyz, mr1), dot(cam._viewInverse[1].xyz, mr2));
+        vec3 mvc2 = vec3(dot(cam._viewInverse[2].xyz, mr0), dot(cam._viewInverse[2].xyz, mr1), dot(cam._viewInverse[2].xyz, mr2));
+
+        normal = vec3(dot(mvc0, inNormal.xyz), dot(mvc1, inNormal.xyz), dot(mvc2, inNormal.xyz));
+    }
+
+
+    { // transformModelToClipPos
+        vec4 _eyepos = (obj._model * inPosition) + vec4(-inPosition.w * cam._viewInverse[3].xyz, 0.0);
+        vec4 clipPos = cam._projectionViewUntranslated * _eyepos;
+        clipPos.xy += normalize(vec2(normal.xy)) * (1.0/512.0);
+        gl_Position = clipPos;
+    }
+
+
+
+}
+
+)SCRIBE";
+
+    const char skin_model_outline_vert[] = R"SCRIBE(#version 410 core
+//  Generated on Thu Feb 18 19:48:48 2016
+//
+//  skin_model_shadow.vert
+//  vertex shader
+//
+//  Created by Andrzej Kapolka on 3/24/14.
+//  Copyright 2014 High Fidelity, Inc.
+//
+//  Distributed under the Apache License, Version 2.0.
+//  See the accompanying file LICENSE or http://www.apache.org/licenses/LICENSE-2.0.html
+//
+
+layout(location = 0) in vec4 inPosition;
+layout(location = 1) in vec4 inNormal;
+layout(location = 2) in vec4 inColor;
+layout(location = 3) in vec4 inTexCoord0;
+layout(location = 4) in vec4 inTangent;
+layout(location = 5) in vec4 inSkinClusterIndex;
+layout(location = 6) in vec4 inSkinClusterWeight;
+layout(location = 7) in vec4 inTexCoord1;
+struct TransformObject {
+    mat4 _model;
+    mat4 _modelInverse;
+};
+
+layout(location=15) in ivec2 _drawCallInfo;
+
+uniform samplerBuffer transformObjectBuffer;
+
+TransformObject getTransformObject() {
+    int offset = 8 * _drawCallInfo.x;
+    TransformObject object;
+    object._model[0] = texelFetch(transformObjectBuffer, offset);
+    object._model[1] = texelFetch(transformObjectBuffer, offset + 1);
+    object._model[2] = texelFetch(transformObjectBuffer, offset + 2);
+    object._model[3] = texelFetch(transformObjectBuffer, offset + 3);
+
+    object._modelInverse[0] = texelFetch(transformObjectBuffer, offset + 4);
+    object._modelInverse[1] = texelFetch(transformObjectBuffer, offset + 5);
+    object._modelInverse[2] = texelFetch(transformObjectBuffer, offset + 6);
+    object._modelInverse[3] = texelFetch(transformObjectBuffer, offset + 7);
+
+    return object;
+}
+
+struct TransformCamera {
+    mat4 _view;
+    mat4 _viewInverse;
+    mat4 _projectionViewUntranslated;
+    mat4 _projection;
+    mat4 _projectionInverse;
+    vec4 _viewport;
+};
+
+layout(std140) uniform transformCameraBuffer {
+    TransformCamera _camera;
+};
+TransformCamera getTransformCamera() {
+    return _camera;
+}
+
+
+
+const int MAX_TEXCOORDS = 2;
+const int MAX_CLUSTERS = 128;
+const int INDICES_PER_VERTEX = 4;
+
+layout(std140) uniform skinClusterBuffer {
+    mat4 clusterMatrices[MAX_CLUSTERS];
+};
+
+void skinPosition(vec4 skinClusterIndex, vec4 skinClusterWeight, vec4 inPosition, out vec4 skinnedPosition) {
+    vec4 newPosition = vec4(0.0, 0.0, 0.0, 0.0);
+
+    for (int i = 0; i < INDICES_PER_VERTEX; i++) {
+        mat4 clusterMatrix = clusterMatrices[int(skinClusterIndex[i])];
+        float clusterWeight = skinClusterWeight[i];
+        newPosition += clusterMatrix * inPosition * clusterWeight;
+    }
+
+    skinnedPosition = newPosition;
+}
+
+void skinPositionNormal(vec4 skinClusterIndex, vec4 skinClusterWeight, vec4 inPosition, vec3 inNormal,
+                        out vec4 skinnedPosition, out vec3 skinnedNormal) {
+    vec4 newPosition = vec4(0.0, 0.0, 0.0, 0.0);
+    vec4 newNormal = vec4(0.0, 0.0, 0.0, 0.0);
+
+    for (int i = 0; i < INDICES_PER_VERTEX; i++) {
+        mat4 clusterMatrix = clusterMatrices[int(skinClusterIndex[i])];
+        float clusterWeight = skinClusterWeight[i];
+        newPosition += clusterMatrix * inPosition * clusterWeight;
+        newNormal += clusterMatrix * vec4(inNormal.xyz, 0.0) * clusterWeight;
+    }
+
+    skinnedPosition = newPosition;
+    skinnedNormal = newNormal.xyz;
+}
+
+void skinPositionNormalTangent(vec4 skinClusterIndex, vec4 skinClusterWeight, vec4 inPosition, vec3 inNormal, vec3 inTangent,
+                               out vec4 skinnedPosition, out vec3 skinnedNormal, out vec3 skinnedTangent) {
+    vec4 newPosition = vec4(0.0, 0.0, 0.0, 0.0);
+    vec4 newNormal = vec4(0.0, 0.0, 0.0, 0.0);
+    vec4 newTangent = vec4(0.0, 0.0, 0.0, 0.0);
+
+    for (int i = 0; i < INDICES_PER_VERTEX; i++) {
+        mat4 clusterMatrix = clusterMatrices[int(skinClusterIndex[i])];
+        float clusterWeight = skinClusterWeight[i];
+        newPosition += clusterMatrix * inPosition * clusterWeight;
+        newNormal += clusterMatrix * vec4(inNormal.xyz, 0.0) * clusterWeight;
+        newTangent += clusterMatrix * vec4(inTangent.xyz, 0.0) * clusterWeight;
+    }
+
+    skinnedPosition = newPosition;
+    skinnedNormal = newNormal.xyz;
+    skinnedTangent = newTangent.xyz;
+}
+
+
+void main(void) {
+    vec4 position = vec4(0.0, 0.0, 0.0, 0.0);
+    vec3 normal = vec3(0.0, 0.0, 0.0);
+    skinPositionNormal(inSkinClusterIndex, inSkinClusterWeight, inPosition, inNormal.xyz, position, normal);
+
+    // standard transform
+    TransformCamera cam = getTransformCamera();
+    TransformObject obj = getTransformObject();
+
+    vec3 eyeNormal = vec3(0.0, 0.0, 0.0);
+    { // transformModelToEyeDir
+        vec3 mr0 = vec3(obj._modelInverse[0].x, obj._modelInverse[1].x, obj._modelInverse[2].x);
+        vec3 mr1 = vec3(obj._modelInverse[0].y, obj._modelInverse[1].y, obj._modelInverse[2].y);
+        vec3 mr2 = vec3(obj._modelInverse[0].z, obj._modelInverse[1].z, obj._modelInverse[2].z);
+
+        vec3 mvc0 = vec3(dot(cam._viewInverse[0].xyz, mr0), dot(cam._viewInverse[0].xyz, mr1), dot(cam._viewInverse[0].xyz, mr2));
+        vec3 mvc1 = vec3(dot(cam._viewInverse[1].xyz, mr0), dot(cam._viewInverse[1].xyz, mr1), dot(cam._viewInverse[1].xyz, mr2));
+        vec3 mvc2 = vec3(dot(cam._viewInverse[2].xyz, mr0), dot(cam._viewInverse[2].xyz, mr1), dot(cam._viewInverse[2].xyz, mr2));
+
+        eyeNormal = vec3(dot(mvc0, normal.xyz), dot(mvc1, normal.xyz), dot(mvc2, normal.xyz));
+    }
+
+    { // transformModelToClipPos
+        vec4 _eyepos = (obj._model * position) + vec4(-position.w * cam._viewInverse[3].xyz, 0.0);
+
+        vec4 clipPos = cam._projectionViewUntranslated * _eyepos;
+        clipPos.xy += normalize(vec2(eyeNormal.xy)) * (1.0/512.0);
+        gl_Position = clipPos;
+    }
+
+}
+
+)SCRIBE";
+
+
+
+
+
     _fillStencilShapePlumber = std::make_shared<render::ShapePlumber>();
     _drawShapePlumber = std::make_shared<render::ShapePlumber>();
     {
@@ -83,6 +337,9 @@ void HighlightingEffect::init() {
         //////////////////
         // second pass draw anywhere the stencil buf is not set, with a scaled version of the same objects.
 
+        auto modelVertexOutline = gpu::Shader::createVertex(std::string(model_outline_vert));
+        auto skinVertexOutline = gpu::Shader::createVertex(std::string(skin_model_outline_vert));
+
         auto drawState = std::make_shared<gpu::State>();
         drawState->setCullMode(gpu::State::CULL_BACK);
         drawState->setColorWriteMask(true, true, true, true);
@@ -92,13 +349,13 @@ void HighlightingEffect::init() {
 
 
         auto modelPixel = gpu::Shader::createPixel(std::string(Solid_frag));
-        gpu::ShaderPointer modelProgram = gpu::Shader::createProgram(modelVertex, modelPixel);
+        gpu::ShaderPointer modelProgram = gpu::Shader::createProgram(modelVertexOutline, modelPixel);
         _drawShapePlumber->addPipeline(
             render::ShapeKey::Filter::Builder().withoutSkinned(),
             modelProgram, drawState);
 
         auto skinPixel = gpu::Shader::createPixel(std::string(Solid_frag));
-        gpu::ShaderPointer skinProgram = gpu::Shader::createProgram(skinVertex, skinPixel);
+        gpu::ShaderPointer skinProgram = gpu::Shader::createProgram(skinVertexOutline, skinPixel);
         _drawShapePlumber->addPipeline(
             render::ShapeKey::Filter::Builder().withSkinned(),
             skinProgram, drawState);
@@ -108,20 +365,26 @@ void HighlightingEffect::init() {
 }
 
 void HighlightingEffect::drawHighlightedItems(RenderArgs* args, const render::SceneContextPointer& sceneContext, const render::ItemBounds& inItems) {
-    glm::mat4 projMat;
-    args->_viewFrustum->evalProjectionMatrix(projMat);
-    // we will do a 2D post projection scaling in screen space on the underneath (outline) pass.
-    const float thickness = 48.0f; // move this to config?
-    float a = 1.0 + thickness / args->_viewport.z;
-    float b = 1.0 + thickness / args->_viewport.w;
-    Transform postProjScaling;
-    postProjScaling.setScale(glm::vec3(a, b, 1.0));
-
-
     // for now just highlight a single item.
     auto& scene = sceneContext->_scene;
     auto& item = scene->getItem(inItems[0].id);
     // if a set of items, group them so that skinned and unskinned are done in two sets.
+
+
+    Transform viewMat;
+    args->_viewFrustum->evalViewTransform(viewMat);
+    args->_batch->setViewTransform(viewMat);
+
+    glm::mat4 projMat;
+    args->_viewFrustum->evalProjectionMatrix(projMat);
+    // we will do a 2D post projection scaling in screen space on the underneath (outline) pass.
+//    const float thickness = 48.0f; // move this to config?
+//    float a = 1.0 + thickness / args->_viewport.z;
+//    float b = 1.0 + thickness / args->_viewport.w;
+//    Transform postProjScaling;
+//    postProjScaling.setScale(glm::vec3(a, b, 1.0));
+
+
 
 
 
@@ -152,7 +415,7 @@ void HighlightingEffect::drawHighlightedItems(RenderArgs* args, const render::Sc
         args->_pipeline = pipeline1;
         args->_batch->setPipeline(pipeline1->pipeline);
     }
-    args->_batch->setProjectionTransform(postProjScaling.getMatrix() * projMat);
+//    args->_batch->setProjectionTransform(postProjScaling.getMatrix() * projMat);
     // set the outline color.
     args->_batch->setUniformBuffer(colorBufferSlot, _colorBuffer);
     item.render(args);
@@ -190,10 +453,6 @@ void HighlightingEffect::run(const render::SceneContextPointer& sceneContext, co
 
         batch.setViewportTransform(args->_viewport);
         batch.setStateScissorRect(args->_viewport);
-
-        Transform viewMat;
-        args->_viewFrustum->evalViewTransform(viewMat);
-        batch.setViewTransform(viewMat);
 
         drawHighlightedItems(args, sceneContext, inItems);
 
