@@ -52,18 +52,9 @@ void HighlightingEffect::init() {
         
         )SCRIBE";
 
+// TODO: move these shaders to a .slv file!!!!!!!!
+
     const char model_outline_vert[] = R"SCRIBE(#version 410 core
-//  Generated on Thu Feb 18 19:48:48 2016
-//
-//  model_shadow.vert
-//  vertex shader
-//
-//  Created by Andrzej Kapolka on 3/24/14.
-//  Copyright 2014 High Fidelity, Inc.
-//
-//  Distributed under the Apache License, Version 2.0.
-//  See the accompanying file LICENSE or http://www.apache.org/licenses/LICENSE-2.0.html
-//
 
 layout(location = 0) in vec4 inPosition;
 layout(location = 1) in vec4 inNormal;
@@ -120,7 +111,6 @@ void main(void) {
     // standard transform
     TransformCamera cam = getTransformCamera();
     TransformObject obj = getTransformObject();
-
     vec3 normal = vec3(0.0, 0.0, 0.0);
     { // transformModelToEyeDir
         vec3 mr0 = vec3(obj._modelInverse[0].x, obj._modelInverse[1].x, obj._modelInverse[2].x);
@@ -131,35 +121,23 @@ void main(void) {
         vec3 mvc1 = vec3(dot(cam._viewInverse[1].xyz, mr0), dot(cam._viewInverse[1].xyz, mr1), dot(cam._viewInverse[1].xyz, mr2));
         vec3 mvc2 = vec3(dot(cam._viewInverse[2].xyz, mr0), dot(cam._viewInverse[2].xyz, mr1), dot(cam._viewInverse[2].xyz, mr2));
 
-        normal = vec3(dot(mvc0, inNormal.xyz), dot(mvc1, inNormal.xyz), dot(mvc2, inNormal.xyz));
+       normal = vec3(dot(mvc0, inNormal.xyz), dot(mvc1, inNormal.xyz), dot(mvc2, inNormal.xyz));
     }
-
 
     { // transformModelToClipPos
         vec4 _eyepos = (obj._model * inPosition) + vec4(-inPosition.w * cam._viewInverse[3].xyz, 0.0);
+
         vec4 clipPos = cam._projectionViewUntranslated * _eyepos;
-        clipPos.xy += normalize(vec2(normal.xy)) * (1.0/512.0);
+// TODO: change 1.0/128.0 to be N/viewport.xy where N = pixels of outline thickness
+        clipPos.xy += normalize(vec2(normal.xy)) * (clipPos.w*1.0/128.0);
         gl_Position = clipPos;
     }
-
-
 
 }
 
 )SCRIBE";
 
     const char skin_model_outline_vert[] = R"SCRIBE(#version 410 core
-//  Generated on Thu Feb 18 19:48:48 2016
-//
-//  skin_model_shadow.vert
-//  vertex shader
-//
-//  Created by Andrzej Kapolka on 3/24/14.
-//  Copyright 2014 High Fidelity, Inc.
-//
-//  Distributed under the Apache License, Version 2.0.
-//  See the accompanying file LICENSE or http://www.apache.org/licenses/LICENSE-2.0.html
-//
 
 layout(location = 0) in vec4 inPosition;
 layout(location = 1) in vec4 inNormal;
@@ -290,11 +268,13 @@ void main(void) {
         eyeNormal = vec3(dot(mvc0, normal.xyz), dot(mvc1, normal.xyz), dot(mvc2, normal.xyz));
     }
 
+
     { // transformModelToClipPos
         vec4 _eyepos = (obj._model * position) + vec4(-position.w * cam._viewInverse[3].xyz, 0.0);
 
         vec4 clipPos = cam._projectionViewUntranslated * _eyepos;
-        clipPos.xy += normalize(vec2(eyeNormal.xy)) * (1.0/512.0);
+// TODO: change 1.0/128.0 to be N/viewport.xy where N = pixels of outline thickness
+        clipPos.xy += normalize(vec2(eyeNormal.xy)) * (clipPos.w*1.0/128.0);
         gl_Position = clipPos;
     }
 
