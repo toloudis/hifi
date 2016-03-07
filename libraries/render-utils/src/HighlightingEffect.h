@@ -19,19 +19,42 @@
 #include <gpu/Pipeline.h>
 #include <render/DrawTask.h>
 
+
+class HighlightingEffectConfig : public render::Job::Config {
+    Q_OBJECT
+    Q_PROPERTY(float lineThickness MEMBER lineThickness WRITE setLineThickness)
+
+public:
+    // TODO FIXME: disabled!!!!
+    HighlightingEffectConfig() : render::Job::Config(false) {}
+
+    // pixels
+    float lineThickness{ 4.0 };
+    glm::vec4 color = glm::vec4(1.0f, 0.0f, 1.0f, 1.0f);
+public slots:
+    void setLineThickness(float thickness) { lineThickness = thickness; emit dirty(); }
+
+signals:
+    void dirty();
+};
+
+
 class HighlightingEffect {
 public:
 	HighlightingEffect();
 
-    using Config = render::Job::Config;
+    using Config = HighlightingEffectConfig;
     using JobModel = render::Job::ModelI<HighlightingEffect, render::ItemBounds, Config>;
 
     void configure(const Config& config);
     void run(const render::SceneContextPointer& sceneContext, const render::RenderContextPointer& renderContext, const render::ItemBounds& inItems);
 
 private:
+    // plumber lets me run separate shaders for skinned and non-skinned geometry
     render::ShapePlumberPointer _fillStencilShapePlumber;
     render::ShapePlumberPointer _drawShapePlumber;
+
+    float _lineThickness;
 
     // Class describing the uniform buffer with all the parameters common to the tone mapping shaders
     class Parameters {

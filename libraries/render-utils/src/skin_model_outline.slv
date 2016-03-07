@@ -1,0 +1,44 @@
+<@include gpu/Config.slh@>
+<$VERSION_HEADER$>
+//  Generated on <$_SCRIBE_DATE$>
+//
+//  skin_model_outline.vert
+//  vertex shader
+//
+//  Created by Dan Toloudis on 3/6/2016.
+//  Copyright 2016 High Fidelity, Inc.
+//
+//  Distributed under the Apache License, Version 2.0.
+//  See the accompanying file LICENSE or http://www.apache.org/licenses/LICENSE-2.0.html
+//
+
+<@include gpu/Inputs.slh@>
+<@include gpu/Transform.slh@>
+<$declareStandardTransform()$>
+
+<@include Skinning.slh@>
+
+uniform float lineThickness;
+
+void main(void) {
+    vec4 position = vec4(0.0, 0.0, 0.0, 0.0);
+    vec3 interpolatedNormal = vec3(0.0, 0.0, 0.0);
+    skinPositionNormal(inSkinClusterIndex, inSkinClusterWeight, inPosition, inNormal.xyz, position, interpolatedNormal);
+
+    // standard transform
+    TransformCamera cam = getTransformCamera();
+    TransformObject obj = getTransformObject();
+
+    vec3 normal;
+    <$transformModelToEyeDir(cam, obj, interpolatedNormal, normal)$>
+    vec4 p;
+    <$transformModelToClipPos(cam, obj, position, p)$>
+
+    vec4 viewport;
+    <$transformCameraViewport(cam, viewport)$>;
+    vec2 pixelToClip = vec2(2.0 / viewport.z, 2.0 / viewport.w);
+
+    p.xy += normalize(vec2(normal.xy)) * ((lineThickness*p.w)*pixelToClip);
+
+    gl_Position = p;
+}
