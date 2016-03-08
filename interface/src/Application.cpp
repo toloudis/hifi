@@ -343,7 +343,7 @@ bool setupEssentials(int& argc, char** argv) {
     DependencyManager::set<AudioClient>();
     DependencyManager::set<AudioScope>();
     DependencyManager::set<DeferredLightingEffect>();
-	DependencyManager::set<TextureCache>();
+    DependencyManager::set<TextureCache>();
     DependencyManager::set<FramebufferCache>();
     DependencyManager::set<AnimationCache>();
     DependencyManager::set<ModelBlender>();
@@ -2781,7 +2781,7 @@ void Application::init() {
     // Make sure Login state is up to date
     DependencyManager::get<DialogsManager>()->toggleLoginDialog();
 
-	DependencyManager::get<DeferredLightingEffect>()->init();
+    DependencyManager::get<DeferredLightingEffect>()->init();
 
     DependencyManager::get<AvatarManager>()->init();
     _myCamera.setMode(CAMERA_MODE_FIRST_PERSON);
