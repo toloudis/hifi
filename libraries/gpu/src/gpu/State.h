@@ -230,8 +230,6 @@ public:
     // Useful for having one const static called Default for reference or for the gpu::Backend to keep track of the current value
     class Data {
     public:
-        float lineWidth = 1.0f;
-
         float depthBias = 0.0f;
         float depthBiasSlopeScale = 0.0f;
 
@@ -346,10 +344,6 @@ public:
     void setColorWriteMask(bool red, bool green, bool blue, bool alpha) { uint32 value = ((WRITE_RED * red) | (WRITE_GREEN * green) | (WRITE_BLUE * blue) | (WRITE_ALPHA * alpha)); SET_FIELD(COLOR_WRITE_MASK, DEFAULT.colorWriteMask, value, _values.colorWriteMask); }
     uint8 getColorWriteMask() const { return _values.colorWriteMask; }
 
-    // Line width
-    void setLineWidth(float lineWidth) { SET_FIELD(LINE_WIDTH, DEFAULT.lineWidth, lineWidth, _values.lineWidth); }
-    float getLineWidth() const { return _values.lineWidth; }
-
     // All the possible fields
     enum Field {
         FILL_MODE,
@@ -375,8 +369,6 @@ public:
         BLEND_FUNCTION,
 
         COLOR_WRITE_MASK,
-
-        LINE_WIDTH, 
 
         NUM_FIELDS, // not a valid field, just the count
     };

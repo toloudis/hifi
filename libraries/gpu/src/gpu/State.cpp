@@ -78,9 +78,6 @@ State::Signature State::evalSignature(const Data& state) {
     if (state.colorWriteMask != State::DEFAULT.colorWriteMask) {
         signature.set(State::COLOR_WRITE_MASK);
     }
-    if (state.lineWidth != State::DEFAULT.lineWidth) {
-        signature.set(State::LINE_WIDTH);
-    }
 
     return signature;
 }

@@ -25,7 +25,6 @@ typedef GLBackend::GLState::Command Command;
 typedef GLBackend::GLState::CommandPointer CommandPointer;
 typedef GLBackend::GLState::Command1<uint32> Command1U;
 typedef GLBackend::GLState::Command1<int32> Command1I;
-typedef GLBackend::GLState::Command1<float> Command1F;
 typedef GLBackend::GLState::Command1<bool> Command1B;
 typedef GLBackend::GLState::Command1<Vec2> CommandDepthBias;
 typedef GLBackend::GLState::Command1<State::DepthTest> CommandDepthTest;
@@ -76,10 +75,7 @@ const GLBackend::GLState::Commands makeResetStateCommands() {
         
         std::make_shared<CommandBlend>(&GLBackend::do_setStateBlend, DEFAULT.blendFunction),
         
-        std::make_shared<Command1U>(&GLBackend::do_setStateColorWriteMask, DEFAULT.colorWriteMask),
-
-        std::make_shared<Command1F>(&GLBackend::do_setStateLineWidth, DEFAULT.lineWidth)
-
+        std::make_shared<Command1U>(&GLBackend::do_setStateColorWriteMask, DEFAULT.colorWriteMask)
     };
 }
 
@@ -137,10 +133,6 @@ void generateBlend(GLBackend::GLState::Commands& commands, const State& state) {
 
 void generateColorWriteMask(GLBackend::GLState::Commands& commands, uint32 mask) {
     commands.push_back(std::make_shared<Command1U>(&GLBackend::do_setStateColorWriteMask, mask));
-}
-
-void generateLineWidth(GLBackend::GLState::Commands& commands, float lineWidth) {
-    commands.push_back(std::make_shared<Command1F>(&GLBackend::do_setStateLineWidth, lineWidth));
 }
 
 GLBackend::GLState* GLBackend::syncGPUObject(const State& state) {
@@ -230,11 +222,6 @@ GLBackend::GLState* GLBackend::syncGPUObject(const State& state) {
                     
                 case State::COLOR_WRITE_MASK: {
                     generateColorWriteMask(object->_commands, state.getColorWriteMask());
-                    break;
-                }
-
-                case State::LINE_WIDTH: {
-                    generateLineWidth(object->_commands, state.getLineWidth());
                     break;
                 }
             }
@@ -775,13 +762,6 @@ void GLBackend::do_setStateColorWriteMask(uint32 mask) {
     }
 }
 
-void GLBackend::do_setStateLineWidth(float lineWidth) {
-    if (lineWidth != _pipeline._stateCache.lineWidth) {
-        glLineWidth(lineWidth);
-        (void)CHECK_GL_ERROR();
-        _pipeline._stateCache.lineWidth = lineWidth;
-    }
-}
 
 void GLBackend::do_setStateBlendFactor(Batch& batch, size_t paramOffset) {
     
