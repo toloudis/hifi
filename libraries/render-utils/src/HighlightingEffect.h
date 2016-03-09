@@ -25,7 +25,7 @@ class HighlightingEffectConfig : public render::Job::Config {
     Q_PROPERTY(float lineThickness MEMBER lineThickness WRITE setLineThickness)
 
 public:
-    // TODO FIXME: disabled!!!!
+    // TODO FIXME: disabled! enable when entities need highlighting
     HighlightingEffectConfig() : render::Job::Config(false) {}
 
     // pixels
@@ -41,7 +41,7 @@ signals:
 
 class HighlightingEffect {
 public:
-	HighlightingEffect();
+    HighlightingEffect();
 
     using Config = HighlightingEffectConfig;
     using JobModel = render::Job::ModelI<HighlightingEffect, render::ItemBounds, Config>;
