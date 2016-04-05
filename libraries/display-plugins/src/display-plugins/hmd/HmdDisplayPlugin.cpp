@@ -18,6 +18,8 @@
 #include <plugins/PluginContainer.h>
 #include <gpu/GLBackend.h>
 #include <CursorManager.h>
+#include <gl/GLWidget.h>
+#include <shared/NsightHelpers.h>
 
 #include "../Logging.h"
 #include "../CompositorHelper.h"
@@ -30,7 +32,7 @@ glm::uvec2 HmdDisplayPlugin::getRecommendedUiSize() const {
     return CompositorHelper::VIRTUAL_SCREEN_SIZE;
 }
 
-void HmdDisplayPlugin::activate() {
+bool HmdDisplayPlugin::internalActivate() {
     _monoPreview = _container->getBoolSetting("monoPreview", DEFAULT_MONO_VIEW);
 
     _container->addMenuItem(PluginType::DISPLAY_PLUGIN, MENU_PATH(), MONO_PREVIEW,
@@ -39,11 +41,8 @@ void HmdDisplayPlugin::activate() {
         _container->setBoolSetting("monoPreview", _monoPreview);
     }, true, _monoPreview);
     _container->removeMenu(FRAMERATE);
-    Parent::activate();
-}
 
-void HmdDisplayPlugin::deactivate() {
-    Parent::deactivate();
+    return Parent::internalActivate();
 }
 
 void HmdDisplayPlugin::customizeContext() {
@@ -62,39 +61,63 @@ void HmdDisplayPlugin::uncustomizeContext() {
 
 void HmdDisplayPlugin::compositeOverlay() {
     using namespace oglplus;
-    _sphereSection->Use();
-    for_each_eye([&](Eye eye) {
-        eyeViewport(eye);
-        auto modelView = glm::inverse(_currentRenderEyePoses[eye]); // *glm::translate(mat4(), vec3(0, 0, -1));
-        auto mvp = _eyeProjections[eye] * modelView;
-        Uniform<glm::mat4>(*_program, _mvpUniform).Set(mvp);
-        _sphereSection->Draw();
-    });
+    auto compositorHelper = DependencyManager::get<CompositorHelper>();
+
+    // check the alpha
+    auto overlayAlpha = compositorHelper->getAlpha();
+    if (overlayAlpha > 0.0f) {
+        // set the alpha
+        Uniform<float>(*_program, _alphaUniform).Set(overlayAlpha);
+
+        _sphereSection->Use();
+        for_each_eye([&](Eye eye) {
+            eyeViewport(eye);
+            auto modelView = glm::inverse(_currentRenderEyePoses[eye]); // *glm::translate(mat4(), vec3(0, 0, -1));
+            auto mvp = _eyeProjections[eye] * modelView;
+            Uniform<glm::mat4>(*_program, _mvpUniform).Set(mvp);
+            _sphereSection->Draw();
+        });
+    }
+    Uniform<float>(*_program, _alphaUniform).Set(1.0);
 }
 
 void HmdDisplayPlugin::compositePointer() {
-    //Mouse Pointer
+    using namespace oglplus;
+
     auto compositorHelper = DependencyManager::get<CompositorHelper>();
-    _plane->Use();
-    // Reconstruct the headpose from the eye poses
-    auto headPosition = (vec3(_currentRenderEyePoses[Left][3]) + vec3(_currentRenderEyePoses[Right][3])) / 2.0f;
-    for_each_eye([&](Eye eye) {
-        using namespace oglplus;
-        eyeViewport(eye);
-        auto reticleTransform = compositorHelper->getReticleTransform(_currentRenderEyePoses[eye], headPosition);
-        auto mvp = _eyeProjections[eye] * reticleTransform;
-        Uniform<glm::mat4>(*_program, _mvpUniform).Set(mvp);
-        _plane->Draw();
-    });
+
+    // check the alpha
+    auto overlayAlpha = compositorHelper->getAlpha();
+    if (overlayAlpha > 0.0f) {
+        // set the alpha
+        Uniform<float>(*_program, _alphaUniform).Set(overlayAlpha);
+
+        // Mouse pointer
+        _plane->Use();
+        // Reconstruct the headpose from the eye poses
+        auto headPosition = (vec3(_currentRenderEyePoses[Left][3]) + vec3(_currentRenderEyePoses[Right][3])) / 2.0f;
+        for_each_eye([&](Eye eye) {
+            eyeViewport(eye);
+            auto reticleTransform = compositorHelper->getReticleTransform(_currentRenderEyePoses[eye], headPosition);
+            auto mvp = _eyeProjections[eye] * reticleTransform;
+            Uniform<glm::mat4>(*_program, _mvpUniform).Set(mvp);
+            _plane->Draw();
+        });
+    }
+    Uniform<float>(*_program, _alphaUniform).Set(1.0);
 }
 
 void HmdDisplayPlugin::internalPresent() {
+
+    PROFILE_RANGE_EX(__FUNCTION__, 0xff00ff00, (uint64_t)presentCount())
+
     // Composite together the scene, overlay and mouse cursor
     hmdPresent();
 
     // screen preview mirroring
     if (_enablePreview) {
-        auto windowSize = toGlm(_window->size());
+        auto window = _container->getPrimaryWidget();
+        auto windowSize = toGlm(window->size());
         float windowAspect = aspect(windowSize);
         float sceneAspect = aspect(_renderTargetSize);
         if (_monoPreview) {
@@ -131,6 +154,8 @@ void HmdDisplayPlugin::internalPresent() {
         });
         swapBuffers();
     }
+
+    postPreview();
 }
 
 void HmdDisplayPlugin::setEyeRenderPose(uint32_t frameIndex, Eye eye, const glm::mat4& pose) {
@@ -142,4 +167,8 @@ void HmdDisplayPlugin::updateFrameData() {
     Parent::updateFrameData();
     Lock lock(_mutex);
     _currentRenderEyePoses = _renderEyePoses[_currentRenderFrameIndex];
+}
+
+glm::mat4 HmdDisplayPlugin::getHeadPose() const {
+    return _headPoseCache.get();
 }

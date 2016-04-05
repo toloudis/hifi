@@ -50,11 +50,12 @@ static const QString RENDER_CONTROLLERS = "Render Hand Controllers";
 const QString ViveControllerManager::NAME = "OpenVR";
 
 bool ViveControllerManager::isSupported() const {
-    return vr::VR_IsHmdPresent();
+    return !isOculusPresent() && vr::VR_IsHmdPresent();
 }
 
-void ViveControllerManager::activate() {
+bool ViveControllerManager::activate() {
     InputPlugin::activate();
+
     _container->addMenu(MENU_PATH);
     _container->addMenuItem(PluginType::INPUT_PLUGIN, MENU_PATH, RENDER_CONTROLLERS,
         [this] (bool clicked) { this->setRenderControllers(clicked); },
@@ -122,6 +123,8 @@ void ViveControllerManager::activate() {
     auto userInputMapper = DependencyManager::get<controller::UserInputMapper>();
     userInputMapper->registerDevice(_inputDevice);
     _registeredWithInputMapper = true;
+
+    return true;
 }
 
 void ViveControllerManager::deactivate() {

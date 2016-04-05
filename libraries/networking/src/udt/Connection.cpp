@@ -80,6 +80,10 @@ void Connection::resetRTT() {
     _rttVariance = _rtt / 2;
 }
 
+void Connection::setMaxBandwidth(int maxBandwidth) {
+    _congestionControl->setMaxBandwidth(maxBandwidth);
+}
+
 SendQueue& Connection::getSendQueue() {
     if (!_sendQueue) {
 
@@ -98,12 +102,17 @@ SendQueue& Connection::getSendQueue() {
         QObject::connect(_sendQueue.get(), &SendQueue::packetSent, this, &Connection::recordSentPackets);
         QObject::connect(_sendQueue.get(), &SendQueue::packetRetransmitted, this, &Connection::recordRetransmission);
         QObject::connect(_sendQueue.get(), &SendQueue::queueInactive, this, &Connection::queueInactive);
+        QObject::connect(_sendQueue.get(), &SendQueue::timeout, this, &Connection::queueTimeout);
+        QObject::connect(_sendQueue.get(), &SendQueue::shortCircuitLoss, this, &Connection::queueShortCircuitLoss);
         
         // set defaults on the send queue from our congestion control object and estimatedTimeout()
         _sendQueue->setPacketSendPeriod(_congestionControl->_packetSendPeriod);
         _sendQueue->setSyncInterval(_synInterval);
         _sendQueue->setEstimatedTimeout(estimatedTimeout());
         _sendQueue->setFlowWindowSize(std::min(_flowWindowSize, (int) _congestionControl->_congestionWindowSize));
+
+        // give the randomized sequence number to the congestion control object
+        _congestionControl->setInitialSendSequenceNumber(_sendQueue->getCurrentSequenceNumber());
     }
     
     return *_sendQueue;
@@ -124,6 +133,18 @@ void Connection::queueInactive() {
         
         deactivate();
     }
+}
+
+void Connection::queueTimeout() {
+    updateCongestionControlAndSendQueue([this]{
+        _congestionControl->onTimeout();
+    });
+}
+
+void Connection::queueShortCircuitLoss(quint32 sequenceNumber) {
+    updateCongestionControlAndSendQueue([this, sequenceNumber]{
+        _congestionControl->onLoss(SequenceNumber { sequenceNumber }, SequenceNumber { sequenceNumber });
+    });
 }
 
 void Connection::sendReliablePacket(std::unique_ptr<Packet> packet) {
@@ -282,7 +303,7 @@ void Connection::sendACK(bool wasCausedBySyncTimeout) {
         // grab the up to date packet receive speed and estimated bandwidth
         int32_t packetReceiveSpeed = _receiveWindow.getPacketReceiveSpeed();
         int32_t estimatedBandwidth = _receiveWindow.getEstimatedBandwidth();
-        
+
         // update those values in our connection stats
         _stats.recordReceiveRate(packetReceiveSpeed);
         _stats.recordEstimatedBandwidth(estimatedBandwidth);
@@ -408,7 +429,15 @@ SequenceNumber Connection::nextACK() const {
 bool Connection::processReceivedSequenceNumber(SequenceNumber sequenceNumber, int packetSize, int payloadSize) {
     
     if (!_hasReceivedHandshake) {
-        // refuse to process any packets until we've received the handshake
+        // Refuse to process any packets until we've received the handshake
+        // Send handshake request to re-request a handshake
+        auto handshakeRequestPacket = ControlPacket::create(ControlPacket::HandshakeRequest, 0);
+        _parentSocket->writeBasePacket(*handshakeRequestPacket, _destination);
+
+#ifdef UDT_CONNECTION_DEBUG
+        qCDebug(networking) << "Received packet before receiving handshake, sending HandshakeRequest";
+#endif
+
         return false;
     }
     
@@ -534,6 +563,17 @@ void Connection::processControl(std::unique_ptr<ControlPacket> controlPacket) {
                 processProbeTail(move(controlPacket));
             }
             break;
+        case ControlPacket::HandshakeRequest:
+            if (_hasReceivedHandshakeACK) {
+                // We're already in a state where we've received a handshake ack, so we are likely in a state
+                // where the other end expired our connection. Let's reset.
+
+#ifdef UDT_CONNECTION_DEBUG
+                qCDebug(networking) << "Got handshake request, stopping SendQueue";
+#endif
+                stopSendQueue();
+            }
+            break;
     }
 }
 
@@ -541,7 +581,7 @@ void Connection::processACK(std::unique_ptr<ControlPacket> controlPacket) {
     // read the ACK sub-sequence number
     SequenceNumber currentACKSubSequenceNumber;
     controlPacket->readPrimitive(&currentACKSubSequenceNumber);
-    
+
     // Check if we need send an ACK2 for this ACK
     // This will be the case if it has been longer than the sync interval OR
     // it looks like they haven't received our ACK2 for this ACK

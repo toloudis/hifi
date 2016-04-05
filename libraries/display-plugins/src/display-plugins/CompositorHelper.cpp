@@ -11,6 +11,7 @@
 #include <memory>
 #include <math.h>
 
+#include <QtCore/QTimer>
 #include <QtCore/QThread>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QDesktopWidget>
@@ -20,7 +21,6 @@
 #include <NumericalConstants.h>
 #include <DependencyManager.h>
 #include <plugins/PluginManager.h>
-#include <plugins/PluginContainer.h>
 #include <CursorManager.h>
 #include <gl/GLWidget.h>
 
@@ -187,16 +187,15 @@ void CompositorHelper::handleLeaveEvent() {
     if (shouldCaptureMouse()) {
         
         //QWidget* mainWidget = (QWidget*)qApp->getWindow();
-        static auto renderingWidget = PluginContainer::getInstance().getPrimaryWidget();
         static QWidget* mainWidget = nullptr;
-        if (mainWidget == nullptr) {
-            mainWidget = renderingWidget->parentWidget();
+        if (mainWidget == nullptr && _renderingWidget != nullptr) {
+            mainWidget = _renderingWidget->parentWidget();
         }
         QRect mainWidgetFrame;
         {
-            mainWidgetFrame = renderingWidget->geometry();
+            mainWidgetFrame = _renderingWidget->geometry();
             auto topLeft = mainWidgetFrame.topLeft();
-            auto topLeftScreen = renderingWidget->mapToGlobal(topLeft);
+            auto topLeftScreen = _renderingWidget->mapToGlobal(topLeft);
             mainWidgetFrame.moveTopLeft(topLeftScreen);
         }
         QRect uncoveredRect = mainWidgetFrame;
@@ -286,32 +285,40 @@ glm::vec2 CompositorHelper::getReticleMaximumPosition() const {
     return result;
 }
 
+void CompositorHelper::sendFakeMouseEvent() {
+    if (qApp->thread() != QThread::currentThread()) {
+        QMetaObject::invokeMethod(this, "sendFakeMouseEvent", Qt::BlockingQueuedConnection);
+        return;
+    }
+
+    if (_renderingWidget) {
+        // in HMD mode we need to fake our mouse moves...
+        QPoint globalPos(_reticlePositionInHMD.x, _reticlePositionInHMD.y);
+        auto button = Qt::NoButton;
+        auto buttons = QApplication::mouseButtons();
+        auto modifiers = QApplication::keyboardModifiers();
+        QMouseEvent event(QEvent::MouseMove, globalPos, button, buttons, modifiers);
+        _fakeMouseEvent = true;
+        qApp->sendEvent(_renderingWidget, &event);
+        _fakeMouseEvent = false;
+    }
+}
+
 void CompositorHelper::setReticlePosition(const glm::vec2& position, bool sendFakeEvent) {
     if (isHMD()) {
-        QMutexLocker locker(&_reticleLock);
         glm::vec2 maxOverlayPosition = _currentDisplayPlugin->getRecommendedUiSize();
         // FIXME don't allow negative mouseExtra
         glm::vec2 mouseExtra = (MOUSE_EXTENTS_PIXELS - maxOverlayPosition) / 2.0f;
         glm::vec2 minMouse = vec2(0) - mouseExtra;
         glm::vec2 maxMouse = maxOverlayPosition + mouseExtra;
 
-        _reticlePositionInHMD = glm::clamp(position, minMouse, maxMouse);
+        {
+            QMutexLocker locker(&_reticleLock);
+            _reticlePositionInHMD = glm::clamp(position, minMouse, maxMouse);
+        }
 
         if (sendFakeEvent) {
-            // in HMD mode we need to fake our mouse moves...
-            QPoint globalPos(_reticlePositionInHMD.x, _reticlePositionInHMD.y);
-            auto button = Qt::NoButton;
-            auto buttons = QApplication::mouseButtons();
-            auto modifiers = QApplication::keyboardModifiers();
-            static auto renderingWidget = PluginContainer::getInstance().getPrimaryWidget();
-            if (qApp->thread() == QThread::currentThread()) {
-                QMouseEvent event(QEvent::MouseMove, globalPos, button, buttons, modifiers);
-                _fakeMouseEvent = true;
-                qApp->sendEvent(renderingWidget, &event);
-                _fakeMouseEvent = false;
-            } else {
-                qApp->postEvent(renderingWidget, new QMouseEvent(QEvent::MouseMove, globalPos, button, buttons, modifiers));
-            }
+            sendFakeMouseEvent();
         }
     } else {
         // NOTE: This is some debugging code we will leave in while debugging various reticle movement strategies,
@@ -335,7 +342,7 @@ void CompositorHelper::computeHmdPickRay(const glm::vec2& cursorPos, glm::vec3& 
 }
 
 glm::mat4 CompositorHelper::getUiTransform() const {
-    return _currentCamera * glm::inverse(_currentDisplayPlugin->getHeadPose(_currentFrame));
+    return _currentCamera * glm::inverse(_currentDisplayPlugin->getHeadPose());
 }
 
 //Finds the collision point of a world space ray
@@ -407,13 +414,39 @@ void CompositorHelper::updateTooltips() {
 }
 
 static const float FADE_DURATION = 500.0f;
+static const float FADE_IN_ALPHA = 1.0f;
+static const float FADE_OUT_ALPHA = 0.0f;
+
+void CompositorHelper::startFadeFailsafe(float endValue) {
+    _fadeStarted = usecTimestampNow();
+    _fadeFailsafeEndValue = endValue;
+
+    const int SLIGHT_DELAY = 10;
+    QTimer::singleShot(FADE_DURATION + SLIGHT_DELAY, [this]{
+        checkFadeFailsafe();
+    });
+}
+
+void CompositorHelper::checkFadeFailsafe() {
+    auto elapsedInFade = usecTimestampNow() - _fadeStarted;
+    if (elapsedInFade > FADE_DURATION) {
+        setAlpha(_fadeFailsafeEndValue);
+    }
+}
+
 void CompositorHelper::fadeIn() {
     _fadeInAlpha = true;
 
     _alphaPropertyAnimation->setDuration(FADE_DURATION);
     _alphaPropertyAnimation->setStartValue(_alpha);
-    _alphaPropertyAnimation->setEndValue(1.0f);
+    _alphaPropertyAnimation->setEndValue(FADE_IN_ALPHA);
     _alphaPropertyAnimation->start();
+
+    // Sometimes, this "QPropertyAnimation" fails to complete the animation, and we end up with a partially faded
+    // state. So we will also have this fail-safe, where we record the timestamp of the fadeRequest, and the target
+    // value of the fade, and if after that time we still haven't faded all the way, we will kick it to the final
+    // fade value
+    startFadeFailsafe(FADE_IN_ALPHA);
 }
 
 void CompositorHelper::fadeOut() {
@@ -421,8 +454,9 @@ void CompositorHelper::fadeOut() {
 
     _alphaPropertyAnimation->setDuration(FADE_DURATION);
     _alphaPropertyAnimation->setStartValue(_alpha);
-    _alphaPropertyAnimation->setEndValue(0.0f);
+    _alphaPropertyAnimation->setEndValue(FADE_OUT_ALPHA);
     _alphaPropertyAnimation->start();
+    startFadeFailsafe(FADE_OUT_ALPHA);
 }
 
 void CompositorHelper::toggle() {
@@ -461,9 +495,8 @@ glm::mat4 CompositorHelper::getReticleTransform(const glm::mat4& eyePose, const 
         result = glm::scale(pointerTransform, reticleScale);
     } else {
         static const float CURSOR_PIXEL_SIZE = 32.0f;
-        static auto renderingWidget = PluginContainer::getInstance().getPrimaryWidget();
-        const auto canvasSize = vec2(toGlm(renderingWidget->size()));;
-        vec2 mousePosition = toGlm(renderingWidget->mapFromGlobal(QCursor::pos()));
+        const auto canvasSize = vec2(toGlm(_renderingWidget->size()));;
+        vec2 mousePosition = toGlm(_renderingWidget->mapFromGlobal(QCursor::pos()));
         mousePosition /= canvasSize;
         mousePosition *= 2.0;
         mousePosition -= 1.0;

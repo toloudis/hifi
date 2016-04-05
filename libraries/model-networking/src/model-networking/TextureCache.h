@@ -101,8 +101,6 @@ private:
 /// A simple object wrapper for an OpenGL texture.
 class Texture {
 public:
-    friend class TextureCache;
-
     gpu::TexturePointer getGPUTexture() const { return _textureSource->getGPUTexture(); }
     gpu::TextureSourcePointer _textureSource;
 };
@@ -132,11 +130,13 @@ signals:
 
 protected:
 
+    virtual bool isCacheable() const override { return _loaded; }
+
     virtual void downloadFinished(const QByteArray& data) override;
           
     Q_INVOKABLE void loadContent(const QByteArray& content);
     // FIXME: This void* should be a gpu::Texture* but i cannot get it to work for now, moving on...
-    Q_INVOKABLE void setImage(const QImage& image, void* texture, int originalWidth, int originalHeight);
+    Q_INVOKABLE void setImage(void* texture, int originalWidth, int originalHeight);
 
 
 private:

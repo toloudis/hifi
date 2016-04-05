@@ -146,7 +146,7 @@ public:
 
 NetworkTexturePointer TextureCache::getTexture(const QUrl& url, TextureType type, const QByteArray& content) {
     TextureExtra extra = { type, content };
-    return ResourceCache::getResource(url, QUrl(), false, &extra).staticCast<NetworkTexture>();
+    return ResourceCache::getResource(url, QUrl(), content.isEmpty(), &extra).staticCast<NetworkTexture>();
 }
 
 /// Returns a texture version of an image file
@@ -320,13 +320,12 @@ void ImageReader::run() {
     }
 
     QMetaObject::invokeMethod(texture.data(), "setImage", 
-        Q_ARG(const QImage&, image),
         Q_ARG(void*, theTexture),
         Q_ARG(int, originalWidth), Q_ARG(int, originalHeight));
     QThread::currentThread()->setPriority(originalPriority);
 }
 
-void NetworkTexture::setImage(const QImage& image, void* voidTexture, int originalWidth,
+void NetworkTexture::setImage(void* voidTexture, int originalWidth,
                               int originalHeight) {
     _originalWidth = originalWidth;
     _originalHeight = originalHeight;
@@ -348,4 +347,3 @@ void NetworkTexture::setImage(const QImage& image, void* voidTexture, int origin
 
     emit networkTextureCreated(qWeakPointerCast<NetworkTexture, Resource> (_self));
 }
-

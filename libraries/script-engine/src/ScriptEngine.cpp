@@ -158,6 +158,13 @@ void ScriptEngine::disconnectNonEssentialSignals() {
 }
 
 void ScriptEngine::runInThread() {
+    Q_ASSERT_X(!_isThreaded, "ScriptEngine::runInThread()", "runInThread should not be called more than once");
+
+    if (_isThreaded) {
+        qCWarning(scriptengine) << "ScriptEngine already running in thread: " << getFilename();
+        return;
+    }
+
     _isThreaded = true;
     QThread* workerThread = new QThread(); // thread is not owned, so we need to manage the delete
     QString scriptEngineName = QString("Script Thread:") + getFilename();
@@ -315,6 +322,7 @@ void ScriptEngine::init() {
     registerGlobalObject("Entities", entityScriptingInterface.data());
     registerGlobalObject("Quat", &_quatLibrary);
     registerGlobalObject("Vec3", &_vec3Library);
+    registerGlobalObject("Mat4", &_mat4Library);
     registerGlobalObject("Uuid", &_uuidLibrary);
     registerGlobalObject("AnimationCache", DependencyManager::get<AnimationCache>().data());
     registerGlobalObject("Messages", DependencyManager::get<MessagesClient>().data());
@@ -665,11 +673,14 @@ void ScriptEngine::run() {
         }
 
         qint64 now = usecTimestampNow();
-        float deltaTime = (float) (now - lastUpdate) / (float) USECS_PER_SECOND;
 
-        if (!_isFinished) {
-            if (_wantSignals) {
-                emit update(deltaTime);
+        // we check for 'now' in the past in case people set their clock back
+        if (lastUpdate < now) {
+            float deltaTime = (float) (now - lastUpdate) / (float) USECS_PER_SECOND;
+            if (!_isFinished) {
+                if (_wantSignals) {
+                    emit update(deltaTime);
+                }
             }
         }
         lastUpdate = now;

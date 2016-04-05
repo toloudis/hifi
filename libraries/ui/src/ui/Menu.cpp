@@ -18,15 +18,8 @@
 #include "Logging.h"
 
 using namespace ui;
-static const char* const MENU_PROPERTY_NAME = "com.highfidelity.Menu";
 
-Menu* Menu::getInstance() {
-    static Menu* instance = globalInstance<Menu>(MENU_PROPERTY_NAME);
-    return instance;
-}
-
-Menu::Menu() {
-}
+Menu::Menu() {}
 
 void Menu::toggleAdvancedMenus() {
     setGroupingIsVisible("Advanced", !getGroupingIsVisible("Advanced"));
@@ -223,14 +216,17 @@ void Menu::removeAction(MenuWrapper* menu, const QString& actionName) {
 
 void Menu::setIsOptionChecked(const QString& menuOption, bool isChecked) {
     if (thread() != QThread::currentThread()) {
-        QMetaObject::invokeMethod(Menu::getInstance(), "setIsOptionChecked", Qt::BlockingQueuedConnection,
+        QMetaObject::invokeMethod(this, "setIsOptionChecked", Qt::BlockingQueuedConnection,
                     Q_ARG(const QString&, menuOption),
                     Q_ARG(bool, isChecked));
         return;
     }
     QAction* menu = _actionHash.value(menuOption);
-    if (menu) {
-        menu->setChecked(isChecked);
+    if (menu && menu->isCheckable()) {
+        auto wasChecked = menu->isChecked();
+        if (wasChecked != isChecked) {
+            menu->trigger();
+        }
     }
 }
 
@@ -275,7 +271,7 @@ QAction* Menu::getActionFromName(const QString& menuName, MenuWrapper* menu) {
 MenuWrapper* Menu::getSubMenuFromName(const QString& menuName, MenuWrapper* menu) {
     QAction* action = getActionFromName(menuName, menu);
     if (action) {
-        return MenuWrapper::fromMenu(action->menu());
+        return _backMap[action->menu()];
     }
     return NULL;
 }
@@ -320,7 +316,7 @@ QAction* Menu::getMenuAction(const QString& menuName) {
         if (!action) {
             break;
         }
-        parent = MenuWrapper::fromMenu(action->menu());
+        parent = _backMap[action->menu()];
     }
     return action;
 }
@@ -357,7 +353,7 @@ MenuWrapper* Menu::addMenu(const QString& menuName, const QString& grouping) {
         menu = getSubMenuFromName(menuTreePart.trimmed(), addTo);
         if (!menu) {
             if (!addTo) {
-                menu = new MenuWrapper(QMenuBar::addMenu(menuTreePart.trimmed()));
+                menu = new MenuWrapper(*this, QMenuBar::addMenu(menuTreePart.trimmed()));
             } else {
                 menu = addTo->addMenu(menuTreePart.trimmed());
             }
@@ -498,11 +494,11 @@ void Menu::removeActionGroup(const QString& groupName) {
     removeMenu(groupName);
 }
 
-MenuWrapper::MenuWrapper(QMenu* menu) : _realMenu(menu) {
+MenuWrapper::MenuWrapper(ui::Menu& rootMenu, QMenu* menu) : _rootMenu(rootMenu), _realMenu(menu) {
     VrMenu::executeOrQueue([=](VrMenu* vrMenu) {
         vrMenu->addMenu(menu);
     });
-    _backMap[menu] = this;
+    _rootMenu._backMap[menu] = this;
 }
 
 QList<QAction*> MenuWrapper::actions() {
@@ -510,7 +506,7 @@ QList<QAction*> MenuWrapper::actions() {
 }
 
 MenuWrapper* MenuWrapper::addMenu(const QString& menuName) {
-    return new MenuWrapper(_realMenu->addMenu(menuName));
+    return new MenuWrapper(_rootMenu, _realMenu->addMenu(menuName));
 }
 
 void MenuWrapper::setEnabled(bool enabled) {
@@ -518,7 +514,11 @@ void MenuWrapper::setEnabled(bool enabled) {
 }
 
 QAction* MenuWrapper::addSeparator() {
-    return _realMenu->addSeparator();
+    QAction* action = _realMenu->addSeparator();
+    VrMenu::executeOrQueue([=](VrMenu* vrMenu) {
+        vrMenu->addSeparator(_realMenu);
+    });
+    return action;
 }
 
 void MenuWrapper::addAction(QAction* action) {
@@ -558,4 +558,3 @@ void MenuWrapper::insertAction(QAction* before, QAction* action) {
     });
 }
 
-QHash<QMenu*, MenuWrapper*> MenuWrapper::_backMap;

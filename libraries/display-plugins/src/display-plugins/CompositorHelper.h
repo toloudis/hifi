@@ -48,6 +48,7 @@ public:
     static const vec2 MOUSE_EXTENTS_PIXELS;
 
     CompositorHelper();
+    void setRenderingWidget(QWidget* widget) { _renderingWidget = widget; }
 
     bool calculateRayUICollisionPoint(const glm::vec3& position, const glm::vec3& direction, glm::vec3& result) const;
 
@@ -116,6 +117,9 @@ public:
 signals:
     void allowMouseCaptureChanged();
 
+protected slots:
+    void sendFakeMouseEvent();
+
 private:
     glm::mat4 getUiTransform() const;
     void updateTooltips();
@@ -123,6 +127,7 @@ private:
     DisplayPluginPointer _currentDisplayPlugin;
     glm::mat4 _currentCamera;
     uint32_t _currentFrame { 0 };
+    QWidget* _renderingWidget{ nullptr };
 
     //// Support for hovering and tooltips
     //static EntityItemID _noItemId;
@@ -141,6 +146,11 @@ private:
     float _prevAlpha { 1.0f };
     float _fadeInAlpha { true };
     float _oculusUIRadius { 1.0f };
+
+    quint64 _fadeStarted { 0 };
+    float _fadeFailsafeEndValue { 1.0f };
+    void checkFadeFailsafe();
+    void startFadeFailsafe(float endValue);
 
     int _reticleQuad;
 

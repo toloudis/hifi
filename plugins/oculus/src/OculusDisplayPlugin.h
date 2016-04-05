@@ -17,13 +17,14 @@ const float TARGET_RATE_Oculus = 75.0f;
 class OculusDisplayPlugin : public OculusBaseDisplayPlugin {
     using Parent = OculusBaseDisplayPlugin;
 public:
-    void activate() override;
     const QString& getName() const override { return NAME; }
 
     float getTargetFrameRate() override { return TARGET_RATE_Oculus; }
 
 protected:
     void hmdPresent() override;
+    // FIXME update with Oculus API call once it's available in the SDK
+    bool isHmdMounted() const override { return true; }
     void customizeContext() override;
     void uncustomizeContext() override;
     void updateFrameData() override;

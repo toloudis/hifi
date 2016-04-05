@@ -75,7 +75,9 @@ public:
     EntityItem(const EntityItemID& entityItemID);
     virtual ~EntityItem();
 
-    inline EntityItemPointer getThisPointer() { return std::static_pointer_cast<EntityItem>(shared_from_this()); }
+    inline EntityItemPointer getThisPointer() const {
+        return std::static_pointer_cast<EntityItem>(std::const_pointer_cast<SpatiallyNestable>(shared_from_this()));
+    }
 
     EntityItemID getEntityItemID() const { return EntityItemID(_id); }
 
@@ -368,7 +370,8 @@ public:
 
     void getAllTerseUpdateProperties(EntityItemProperties& properties) const;
 
-    void flagForOwnership() { _dirtyFlags |= Simulation::DIRTY_SIMULATOR_OWNERSHIP; }
+    void pokeSimulationOwnership() { _dirtyFlags |= Simulation::DIRTY_SIMULATION_OWNERSHIP_FOR_POKE; }
+    void grabSimulationOwnership() { _dirtyFlags |= Simulation::DIRTY_SIMULATION_OWNERSHIP_FOR_GRAB; }
     void flagForMotionStateChange() { _dirtyFlags |= Simulation::DIRTY_MOTION_TYPE; }
 
     bool addAction(EntitySimulation* simulation, EntityActionPointer action);

@@ -23,7 +23,6 @@
 
 #include <AnimationCache.h>
 #include <AnimVariant.h>
-#include <AssetClient.h>
 #include <AvatarData.h>
 #include <AvatarHashMap.h>
 #include <LimitedNodeList.h>
@@ -32,8 +31,10 @@
 
 #include "MouseEvent.h"
 #include "ArrayBufferClass.h"
+#include "AssetScriptingInterface.h"
 #include "AudioScriptingInterface.h"
 #include "Quat.h"
+#include "Mat4.h"
 #include "ScriptCache.h"
 #include "ScriptUUID.h"
 #include "Vec3.h"
@@ -199,6 +200,7 @@ protected:
     QString _fileNameString;
     Quat _quatLibrary;
     Vec3 _vec3Library;
+    Mat4 _mat4Library;
     ScriptUUID _uuidLibrary;
     std::atomic<bool> _isUserLoaded { false };
     bool _isReloading { false };
