@@ -22,7 +22,8 @@
 
 class HighlightingEffectConfig : public render::Job::Config {
     Q_OBJECT
-    Q_PROPERTY(float lineThickness MEMBER lineThickness WRITE setLineThickness)
+        Q_PROPERTY(bool enabled MEMBER enabled)
+        Q_PROPERTY(float lineThickness MEMBER lineThickness WRITE setLineThickness)
 
 public:
     // TODO FIXME: disabled! enable when entities need highlighting
@@ -56,14 +57,7 @@ private:
 
     float _lineThickness;
 
-    // Class describing the uniform buffer with all the parameters common to the tone mapping shaders
-    class Parameters {
-    public:
-        glm::vec4 _color;
-
-        Parameters() {}
-    };
-    gpu::BufferView _colorBuffer;
+    glm::vec4 _color;
 
 
     void init();

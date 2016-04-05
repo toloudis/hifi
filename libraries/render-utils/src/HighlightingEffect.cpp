@@ -24,39 +24,23 @@
 #include "model_outline_vert.h"
 #include "skin_model_outline_vert.h"
 #include "drawOpaqueStencil_frag.h"
+#include "highlight_frag.h"
 
-// location of color uniform in shader
-int colorBufferSlot = 0;
 static const char* lineThicknessName = "lineThickness";
+static const char* colorName = "color";
 // location of line thickness uniform in shader
 gpu::int32 lineThicknessSlotSkinned = 0;
 gpu::int32 lineThicknessSlotUnskinned = 0;
+// location of color uniform in shader
+gpu::int32 colorSlotSkinned = 0;
+gpu::int32 colorSlotUnskinned = 0;
 
 HighlightingEffect::HighlightingEffect() {
-    Parameters parameters;
-    _colorBuffer = gpu::BufferView(std::make_shared<gpu::Buffer>(sizeof(Parameters), (const gpu::Byte*) &parameters));
-    _colorBuffer.edit<Parameters>()._color = glm::vec4(1.0, 0.0, 1.0, 1.0);
+    _color = glm::vec4(1.0, 0.0, 1.0, 1.0);
     _lineThickness = 4.0f;
 }
 
 void HighlightingEffect::init() {
-    // prep shader
-    const char Solid_frag[] = R"SCRIBE(#version 410 core
-
-        struct ColorParams {
-            vec4 color;
-        };
-
-        uniform colorParamsBuffer {
-            ColorParams params;
-        };
-
-        out vec4 outFragColor;
-        void main(void) {
-            outFragColor = params.color;
-        }
-        
-    )SCRIBE";
 
     _fillStencilShapePlumber = std::make_shared<render::ShapePlumber>();
     _drawShapePlumber = std::make_shared<render::ShapePlumber>();
@@ -102,13 +86,13 @@ void HighlightingEffect::init() {
         drawState->setStencilTest(true, 0xFF, gpu::State::StencilTest(STENCIL_KEY, 0xFF, gpu::NOT_EQUAL, gpu::State::STENCIL_OP_KEEP, gpu::State::STENCIL_OP_KEEP, gpu::State::STENCIL_OP_KEEP));
 
 
-        auto modelPixel = gpu::Shader::createPixel(std::string(Solid_frag));
+        auto modelPixel = gpu::Shader::createPixel(std::string(highlight_frag));
         gpu::ShaderPointer modelProgram = gpu::Shader::createProgram(modelVertexOutline, modelPixel);
         _drawShapePlumber->addPipeline(
             render::ShapeKey::Filter::Builder().withoutSkinned(),
             modelProgram, drawState);
 
-        auto skinPixel = gpu::Shader::createPixel(std::string(Solid_frag));
+        auto skinPixel = gpu::Shader::createPixel(std::string(highlight_frag));
         gpu::ShaderPointer skinProgram = gpu::Shader::createProgram(skinVertexOutline, skinPixel);
         _drawShapePlumber->addPipeline(
             render::ShapeKey::Filter::Builder().withSkinned(),
@@ -117,6 +101,9 @@ void HighlightingEffect::init() {
 
         lineThicknessSlotUnskinned = modelProgram->getUniforms().findLocation(lineThicknessName);
         lineThicknessSlotSkinned = skinProgram->getUniforms().findLocation(lineThicknessName);
+        colorSlotUnskinned = modelProgram->getUniforms().findLocation(colorName);
+        colorSlotSkinned = skinProgram->getUniforms().findLocation(colorName);
+
     }
 
 
@@ -152,15 +139,15 @@ void HighlightingEffect::drawHighlightedItems(RenderArgs* args, const render::Sc
         args->_pipeline = pipeline1Skinned;
         args->_batch->setPipeline(pipeline1Skinned->pipeline);
         args->_batch->_glUniform(lineThicknessSlotSkinned, _lineThickness);
+        args->_batch->_glUniform(colorSlotSkinned, _color);
     }
     else {
         args->_pipeline = pipeline1;
         args->_batch->setPipeline(pipeline1->pipeline);
         args->_batch->_glUniform(lineThicknessSlotUnskinned, _lineThickness);
+        args->_batch->_glUniform(colorSlotUnskinned, _color);
     }
 
-    // set the outline color.
-    args->_batch->setUniformBuffer(colorBufferSlot, _colorBuffer);
     item.render(args);
 
     args->_pipeline = nullptr;
@@ -214,6 +201,6 @@ void HighlightingEffect::run(const render::SceneContextPointer& sceneContext, co
 
 void HighlightingEffect::configure(const Config& config) {
     _lineThickness = config.lineThickness;
-    _colorBuffer.edit<Parameters>()._color = config.color;
+    _color = config.color;
 }
 
